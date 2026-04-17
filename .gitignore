@@ -5,6 +5,9 @@ __pycache__/
 *.so
 .Python
 
+# Scripts directory pycache
+scripts/__pycache__/
+
 # Virtual environments
 venv/
 env/
