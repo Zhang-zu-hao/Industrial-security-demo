@@ -80,6 +80,34 @@ class EventStore:
         with self._lock:
             return self._total
 
+    def get_events_by_date(self, date_str: str, limit: int = 100) -> List[Dict]:
+        """从 events.jsonl 文件读取指定日期的事件"""
+        if not date_str:
+            # 没有日期筛选，返回最近的 events
+            return self.recent(limit)
+        
+        events = []
+        log_path = Path(__file__).resolve().parent.parent / "output" / "events.jsonl"
+        if not log_path.is_file():
+            return []
+        
+        try:
+            with open(log_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        event = json.loads(line.strip())
+                        # timestamp 格式：20260416-064358
+                        if event.get("timestamp", "").startswith(date_str):
+                            events.append(event)
+                            if len(events) >= limit:
+                                break
+                    except json.JSONDecodeError:
+                        continue
+        except Exception:
+            pass
+        
+        return events
+
 
 class StatsCollector:
     """Collects per-frame stats for the dashboard."""
@@ -204,13 +232,22 @@ class DemoHandler(SimpleHTTPRequestHandler):
         if self.path == "/api/stream":
             self._serve_mjpeg()
         elif self.path.startswith("/api/events"):
-            self._json_response(event_store.recent(100))
+            # 支持按日期筛选：/api/events?date=20260416
+            from urllib.parse import parse_qs, urlparse
+            parsed = urlparse(self.path)
+            params = parse_qs(parsed.query)
+            date_filter = params.get('date', [None])[0]
+            self._json_response(self._get_events_by_date(date_filter, 100))
         elif self.path == "/api/stats":
             self._json_response(stats.snapshot())
         elif self.path == "/api/config":
             self._json_response(get_config_snapshot())
         else:
             self._serve_static()
+
+    def _get_events_by_date(self, date_filter: Optional[str], limit: int = 100) -> List[Dict]:
+        """从 event_store 读取指定日期的事件"""
+        return event_store.get_events_by_date(date_filter, limit)
 
     def do_POST(self):
         if self.path == "/api/rules":

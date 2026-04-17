@@ -134,6 +134,34 @@ class EventStore:
         with self._lock:
             self._events.clear()
 
+    def get_events_by_date(self, date_str: str, limit: int = 100) -> List[Dict]:
+        """从 events.jsonl 文件读取指定日期的事件"""
+        if not date_str:
+            # 没有日期筛选，返回最近的 events
+            return self.recent(limit)
+        
+        events = []
+        log_path = Path(__file__).resolve().parent.parent / "output" / "events.jsonl"
+        if not log_path.is_file():
+            return []
+        
+        try:
+            with open(log_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        event = json.loads(line.strip())
+                        # timestamp 格式：20260416-064358
+                        if event.get("timestamp", "").startswith(date_str):
+                            events.append(event)
+                            if len(events) >= limit:
+                                break
+                    except json.JSONDecodeError:
+                        continue
+        except Exception:
+            pass
+        
+        return events
+
 
 class StatsCollector:
     """Real-time stats collector."""
@@ -467,15 +495,29 @@ class DemoHandler(SimpleHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", 0))
         return self.rfile.read(length)
 
+    def _get_events_by_date(self, date_filter: Optional[str], limit: int = 100) -> List[Dict]:
+        """从 event_store 读取指定日期的事件"""
+        return event_store.get_events_by_date(date_filter, limit)
+
     def do_GET(self):
         if self.path == "/api/stream":
             self._serve_mjpeg()
         elif self.path == "/api/events/images":
-            self._serve_event_image_list()
+            # 支持按日期筛选：/api/events/images?date=20260416
+            from urllib.parse import parse_qs, urlparse
+            parsed = urlparse(self.path)
+            params = parse_qs(parsed.query)
+            date_filter = params.get('date', [None])[0]
+            self._serve_event_image_list(date_filter)
         elif self.path.startswith("/api/events/img/"):
             self._serve_event_image(self.path[len("/api/events/img/"):])
         elif self.path.startswith("/api/events"):
-            self._json_response(event_store.recent(100))
+            # 支持按日期筛选：/api/events?date=20260416
+            from urllib.parse import parse_qs, urlparse
+            parsed = urlparse(self.path)
+            params = parse_qs(parsed.query)
+            date_filter = params.get('date', [None])[0]
+            self._json_response(self._get_events_by_date(date_filter, 100))
         elif self.path == "/api/stats":
             self._json_response(stats.snapshot())
         elif self.path == "/api/config":
@@ -485,12 +527,22 @@ class DemoHandler(SimpleHTTPRequestHandler):
         else:
             self._serve_static()
 
-    def _serve_event_image_list(self) -> None:
+    def _serve_event_image_list(self, date_filter: Optional[str] = None) -> None:
+        """列出事件截图，支持按日期筛选"""
         events_dir = Path(__file__).resolve().parent.parent / "output" / "events"
         if not events_dir.is_dir():
             self._json_response([])
             return
-        files = sorted(events_dir.glob("*.jpg"), key=lambda f: f.stat().st_mtime, reverse=True)[:30]
+        
+        files = sorted(events_dir.glob("*.jpg"), key=lambda f: f.stat().st_mtime, reverse=True)
+        
+        # 如果指定了日期，过滤文件名
+        if date_filter:
+            # 文件名格式：20260416-064358_zone_enter_track2.jpg
+            files = [f for f in files if f.name.startswith(date_filter)]
+        
+        # 限制返回数量
+        files = files[:30]
         result = [{"name": f.name, "url": f"/api/events/img/{f.name}"} for f in files]
         self._json_response(result)
 

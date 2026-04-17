@@ -212,6 +212,23 @@ body {
 .ctrl-inp:focus { border-color: var(--accent); }
 
 /* Feature toggles */
+.date-picker {
+  padding: 4px 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+  outline: none;
+  cursor: pointer;
+}
+.date-picker:focus { border-color: var(--accent); }
+.date-picker::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  cursor: pointer;
+}
+
 .feature-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -355,6 +372,10 @@ body {
     <div class="events-wrap">
       <div class="panel-head">
         <span data-zh="事件日志" data-en="Event Log">事件日志 / Event Log</span>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <input type="date" id="eventDate" class="date-picker" onchange="pollEvents()">
+          <button class="btn-sm btn-ghost" onclick="resetEventDate()" title="清除日期筛选">✕</button>
+        </div>
         <span class="sub" id="evtCount">0 events</span>
       </div>
       <div class="evt-scroll" id="evtList"></div>
@@ -644,7 +665,10 @@ async function pollStats() {
 // Events polling
 async function pollEvents() {
   try {
-    const r = await fetch('/api/events');
+    const dateInput = $('eventDate');
+    const dateFilter = dateInput.value ? dateInput.value.replace(/-/g, '') : null;
+    const url = dateFilter ? `/api/events?date=${dateFilter}` : '/api/events';
+    const r = await fetch(url);
     const evts = await r.json();
     $('evtList').innerHTML = evts.slice().reverse().map(renderEvt).join('');
     $('evtCount').textContent = `${evts.length} events`;
@@ -733,6 +757,12 @@ function clearEvents() {
   $('vEvt').textContent = '0';
   fetch('/api/events/clear', {method: 'POST'});
   toastMsg('日志已清空', 'Log cleared');
+}
+
+// 重置日期筛选
+function resetEventDate() {
+  $('eventDate').value = '';
+  pollEvents();
 }
 
 // Quality slider
