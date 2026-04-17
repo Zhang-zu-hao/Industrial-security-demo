@@ -508,32 +508,33 @@ function toastMsg(zh, en) {
 
 function updateClock() {
   const el = $('clock');
-  let unixSec;
-  if (serverClockUnix != null && serverClockPerfAt != null) {
-    unixSec = serverClockUnix + (performance.now() - serverClockPerfAt) / 1000;
-  } else {
-    unixSec = Date.now() / 1000;
-  }
-  const d = new Date(unixSec * 1000);
+  // 使用系统当前时间，确保与摄像头时间同步
+  const now = new Date();
   const locale = currentLang === 'zh' ? 'zh-CN' : 'en-US';
-  const tz = serverTzIana || Intl.DateTimeFormat().resolvedOptions().timeZone;
-  try {
-    el.textContent = new Intl.DateTimeFormat(locale, {
-      weekday: 'short',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: currentLang !== 'zh',
-      timeZone: tz,
-    }).format(d);
-  } catch (e) {
-    el.textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-  }
-  el.title = serverClockUnix != null
-    ? `Device time · ${tz}`
-    : `Browser time · ${tz}`;
+  
+  // 格式化时间为：星期 月/日 时：分：秒
+  const options = {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  };
+  
+  const formatter = new Intl.DateTimeFormat(locale, options);
+  const parts = formatter.formatToParts(now);
+  const month = parts.find(p => p.type === 'month').value;
+  const day = parts.find(p => p.type === 'day').value;
+  const hour = parts.find(p => p.type === 'hour').value;
+  const minute = parts.find(p => p.type === 'minute').value;
+  const second = parts.find(p => p.type === 'second').value;
+  
+  // 获取星期
+  const weekday = now.toLocaleDateString(locale, { weekday: 'short' });
+  
+  el.textContent = `${weekday} ${month}/${day} ${hour}:${minute}:${second}`;
+  el.title = '系统时间';
 }
 setInterval(updateClock, 1000);
 updateClock();
