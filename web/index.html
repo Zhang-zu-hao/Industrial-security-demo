@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Industrial Security - reComputer J3011</title>
+<title>Industrial Security Demo</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;500;700&display=swap');
 
@@ -12,25 +12,19 @@
   --surface: #12151c;
   --surface2: #181c26;
   --border: #1e2330;
-  --border-hl: #2d3348;
   --accent: #22d3a7;
-  --accent-dim: rgba(34,211,167,0.12);
   --danger: #ef4444;
-  --danger-dim: rgba(239,68,68,0.12);
   --warn: #f59e0b;
-  --warn-dim: rgba(245,158,11,0.12);
   --blue: #3b82f6;
-  --blue-dim: rgba(59,130,246,0.12);
+  --purple: #a855f7;
   --text: #e8eaed;
   --text2: #7c829d;
-  --text3: #4a4f65;
   --mono: 'JetBrains Mono', monospace;
   --sans: 'Noto Sans SC', system-ui, sans-serif;
   --radius: 8px;
 }
 
 * { margin:0; padding:0; box-sizing:border-box; }
-
 body {
   font-family: var(--sans);
   background: var(--bg);
@@ -39,7 +33,6 @@ body {
   height: 100vh;
 }
 
-/* ─── Top bar ─── */
 .topbar {
   height: 48px;
   display: flex;
@@ -49,40 +42,13 @@ body {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
-.topbar-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.logo-img {
-  height: 32px;
-  width: auto;
-}
-.title-group {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.topbar-title { 
-  font-size: 15px; 
-  font-weight: 700; 
-  letter-spacing: 0.3px;
-  color: var(--text);
-}
-.topbar-subtitle { 
-  font-size: 11px; 
-  color: var(--text2); 
-  font-weight: 400;
-  letter-spacing: 0.5px;
-}
+.topbar-left { display: flex; align-items: center; gap: 12px; }
+.logo-img { height: 32px; width: auto; }
+.title-group { display: flex; flex-direction: column; gap: 2px; }
+.topbar-title { font-size: 15px; font-weight: 700; color: var(--text); }
+.topbar-subtitle { font-size: 11px; color: var(--text2); }
 .topbar-right { display: flex; align-items: center; gap: 16px; }
-.lang-switch {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  color: var(--text2);
-}
+.lang-switch { display: flex; align-items: center; gap: 4px; }
 .lang-btn {
   padding: 3px 8px;
   border: 1px solid var(--border);
@@ -91,43 +57,25 @@ body {
   color: var(--text2);
   font-size: 11px;
   cursor: pointer;
-  transition: all 0.15s;
 }
-.lang-btn.active {
-  background: var(--accent);
-  color: #000;
-  border-color: var(--accent);
-}
-.lang-btn:hover:not(.active) {
-  border-color: var(--text2);
-  color: var(--text);
-}
-.conn-badge {
-  display: flex; align-items: center; gap: 6px;
-  font-size: 12px; color: var(--text2);
-  font-family: var(--mono);
-}
-.conn-dot {
-  width: 7px; height: 7px; border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 8px var(--accent);
-  animation: blink 2s ease-in-out infinite;
-}
+.lang-btn.active { background: var(--accent); color: #000; border-color: var(--accent); }
+.conn-badge { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text2); font-family: var(--mono); }
+.conn-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); transition: all 0.3s; }
 .conn-dot.off { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
-@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
-.clock { font-family: var(--mono); font-size: 12px; color: var(--text3); }
+.conn-dot.connecting { background: var(--warn); box-shadow: 0 0 8px var(--warn); animation: pulse 1.5s infinite; }
+.clock { font-family: var(--mono); font-size: 11px; color: var(--text2); text-align: right; line-height: 1.25; max-width: 200px; white-space: nowrap; }
 
-/* ─── Layout ─── */
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
 .shell {
   display: grid;
-  grid-template-columns: 1fr 340px;
+  grid-template-columns: 1fr 380px;
   grid-template-rows: auto 1fr;
   gap: 12px;
   padding: 12px 16px;
   height: calc(100vh - 48px);
 }
 
-/* ─── Metric strip ─── */
 .metrics {
   grid-column: 1 / -1;
   display: grid;
@@ -142,35 +90,21 @@ body {
   position: relative;
   overflow: hidden;
 }
-.metric::before {
-  content: '';
-  position: absolute; top: 0; left: 0;
-  width: 3px; height: 100%;
-  border-radius: 0 2px 2px 0;
-}
+.metric::before { content: ''; position: absolute; top: 0; left: 0; width: 3px; height: 100%; }
 .metric.m-fps::before { background: var(--accent); }
 .metric.m-det::before { background: var(--blue); }
-.metric.m-trk::before { background: #a855f7; }
+.metric.m-trk::before { background: var(--purple); }
 .metric.m-evt::before { background: var(--warn); }
-.metric.m-up::before  { background: var(--text3); }
-.metric.m-gpu::before { background: var(--danger); }
-.m-label {
-  font-size: 10px; font-weight: 500;
-  text-transform: uppercase; letter-spacing: 1.2px;
-  color: var(--text2); margin-bottom: 4px;
-}
-.m-val {
-  font-family: var(--mono);
-  font-size: 22px; font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
+.metric.m-up::before { background: #6b7280; }
+.metric.m-model::before { background: var(--danger); }
+.m-label { font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 1.2px; color: var(--text2); margin-bottom: 4px; }
+.m-val { font-family: var(--mono); font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .m-fps .m-val { color: var(--accent); }
 .m-det .m-val { color: var(--blue); }
-.m-trk .m-val { color: #a855f7; }
+.m-trk .m-val { color: var(--purple); }
 .m-evt .m-val { color: var(--warn); }
-.m-gpu .m-val { color: var(--danger); }
+.m-model .m-val { color: var(--danger); font-size: 16px; }
 
-/* ─── Video panel ─── */
 .video-wrap {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -178,7 +112,6 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  min-height: 0;
 }
 .panel-head {
   display: flex;
@@ -188,15 +121,27 @@ body {
   border-bottom: 1px solid var(--border);
   font-size: 12px; font-weight: 600;
 }
-.panel-head .sub { color: var(--text2); font-weight: 400; font-family: var(--mono); font-size: 11px; }
-.video-wrap img {
-  width: 100%; flex: 1;
-  object-fit: contain;
+.panel-head .sub { color: var(--text2); font-weight: 400; }
+.video-container {
+  flex: 1;
   background: #000;
-  min-height: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#stream { width: 100%; height: 100%; object-fit: contain; }
+.video-status {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: rgba(0,0,0,0.7);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: var(--mono);
 }
 
-/* ─── Right column ─── */
 .right-col {
   display: flex;
   flex-direction: column;
@@ -204,7 +149,6 @@ body {
   min-height: 0;
 }
 
-/* ─── Events ─── */
 .events-wrap {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -214,45 +158,40 @@ body {
   flex: 1;
   min-height: 0;
 }
-.evt-scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding: 2px 0;
-}
+.evt-scroll { flex: 1; overflow-y: auto; padding: 2px 0; }
 .evt {
   display: grid;
-  grid-template-columns: 56px 1fr auto;
+  grid-template-columns: 64px 1fr auto;
   gap: 8px;
   align-items: center;
   padding: 8px 12px;
   border-bottom: 1px solid var(--border);
   font-size: 11px;
-  transition: background 0.12s;
 }
-.evt:hover { background: rgba(255,255,255,0.02); }
 .evt-tag {
-  padding: 2px 0; text-align: center;
+  padding: 2px 0;
+  text-align: center;
   border-radius: 4px;
   font-size: 9px; font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
-.tag-zone_enter { background: var(--accent-dim); color: var(--accent); }
-.tag-loitering  { background: var(--warn-dim); color: var(--warn); }
-.tag-line_cross { background: var(--danger-dim); color: var(--danger); }
+.tag-zone_enter { background: rgba(34,211,167,0.12); color: var(--accent); }
+.tag-loitering { background: rgba(245,158,11,0.12); color: var(--warn); }
+.tag-line_cross { background: rgba(239,68,68,0.12); color: var(--danger); }
 .evt-body { min-width: 0; }
 .evt-main { color: var(--text); font-weight: 500; }
-.evt-sub { color: var(--text2); font-family: var(--mono); font-size: 10px; margin-top: 1px; }
-.evt-time { color: var(--text3); font-family: var(--mono); font-size: 10px; white-space: nowrap; }
+.evt-sub { color: var(--text2); font-family: var(--mono); font-size: 10px; }
+.evt-time { color: var(--text2); font-family: var(--mono); font-size: 10px; white-space: nowrap; }
 
-/* ─── Controls ─── */
 .ctrl-wrap {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 12px 14px;
+  overflow-y: auto;
+  max-height: 50vh;
 }
-.ctrl-wrap .panel-head { padding: 0 0 8px 0; border: none; }
+.ctrl-wrap .panel-head { padding: 0 0 6px 0; border: none; }
 .ctrl-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -260,10 +199,7 @@ body {
 }
 .ctrl-field { display: flex; flex-direction: column; gap: 3px; }
 .ctrl-field.full { grid-column: 1 / -1; }
-.ctrl-lbl {
-  font-size: 10px; text-transform: uppercase;
-  letter-spacing: 0.8px; color: var(--text2);
-}
+.ctrl-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text2); }
 .ctrl-inp {
   padding: 6px 8px;
   background: var(--bg);
@@ -273,35 +209,130 @@ body {
   font-family: var(--mono);
   font-size: 12px;
   outline: none;
-  transition: border-color 0.15s;
 }
 .ctrl-inp:focus { border-color: var(--accent); }
-.slider-row { display: flex; align-items: center; gap: 8px; }
-.slider-row input[type=range] { flex: 1; accent-color: var(--accent); }
-.slider-val { font-family: var(--mono); font-size: 12px; color: var(--accent); min-width: 32px; }
-.btn-row { display: flex; gap: 8px; margin-top: 4px; }
-.btn {
-  flex: 1; padding: 7px 12px;
-  border: none; border-radius: 5px;
-  font-size: 12px; font-weight: 600;
-  cursor: pointer; transition: all 0.15s;
-  font-family: var(--sans);
+
+.model-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.model-card {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
 }
+.model-card:hover { border-color: var(--text2); }
+.model-card.active { border-color: var(--accent); background: rgba(34,211,167,0.08); }
+.model-card.loading { border-color: var(--warn); background: rgba(245,158,11,0.06); pointer-events: none; }
+.model-card .mc-name { font-family: var(--mono); font-size: 13px; font-weight: 600; }
+.model-card.active .mc-name { color: var(--accent); }
+.model-card .mc-info { font-size: 10px; color: var(--text2); }
+.model-card .mc-badge {
+  font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 3px;
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.mc-badge.current { background: rgba(34,211,167,0.15); color: var(--accent); }
+.mc-badge.ready { background: rgba(59,130,246,0.12); color: var(--blue); }
+.mc-badge.build { background: rgba(245,158,11,0.12); color: var(--warn); }
+.mc-badge.switching { background: rgba(245,158,11,0.2); color: var(--warn); animation: pulse 1s infinite; }
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.feature-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+}
+.feature-item:hover { border-color: var(--text2); }
+.feature-item.active { border-color: var(--accent); background: rgba(34,211,167,0.08); }
+.feature-checkbox { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent); }
+.feature-label { font-size: 11px; color: var(--text); cursor: pointer; }
+
+.btn-row { display: flex; gap: 8px; margin-top: 8px; }
+.btn {
+  flex: 1;
+  padding: 7px 12px;
+  border: none;
+  border-radius: 5px;
+  font-size: 12px; font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-sm { padding: 7px 14px; flex: 0; }
 .btn-primary { background: var(--accent); color: #000; }
 .btn-primary:hover { filter: brightness(1.15); }
-.btn-ghost {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text2);
-}
+.btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text2); }
 .btn-ghost:hover { border-color: var(--text2); color: var(--text); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* ─── Scrollbar ─── */
+.btn-detect {
+  width: 100%;
+  padding: 12px;
+  font-size: 15px;
+  font-weight: bold;
+  margin-bottom: 10px;
+  border-radius: 6px;
+  border: 2px solid;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+.btn-detect.off {
+  background: #1a2332;
+  border-color: #334155;
+  color: #94a3b8;
+}
+.btn-detect.off:hover { background: #1e3a5f; border-color: #3b82f6; color: #60a5fa; }
+.btn-detect.on {
+  background: linear-gradient(135deg, #065f46, #047857);
+  border-color: #10b981;
+  color: #fff;
+  box-shadow: 0 0 12px rgba(16,185,129,0.3);
+}
+.btn-detect.on:hover { filter: brightness(1.15); }
+
+.section-gap { margin-top: 10px; }
+
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border-hl); border-radius: 2px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
-/* ─── Toast ─── */
+.snap-gallery {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  padding: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.snap-thumb {
+  width: 100%; aspect-ratio: 16/9;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+.snap-thumb:hover { border-color: var(--accent); }
+.snap-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+  z-index: 1000; display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.snap-overlay img { max-width: 90vw; max-height: 90vh; border-radius: 8px; }
+.snap-empty { grid-column: 1/-1; text-align: center; padding: 16px; color: var(--text2); font-size: 11px; }
+
 .toast {
   position: fixed; bottom: 20px; right: 20px;
   padding: 10px 18px;
@@ -315,17 +346,8 @@ body {
   z-index: 999;
 }
 .toast.show { transform: translateY(0); opacity: 1; }
-
-/* ─── Responsive ─── */
-@media (max-width: 900px) {
-  .shell {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto auto 1fr;
-    overflow-y: auto;
-  }
-  .metrics { grid-template-columns: repeat(3, 1fr); }
-  .right-col { max-height: 50vh; }
-}
+.toast.error { border-color: var(--danger); color: var(--danger); }
+.toast.info { border-color: var(--blue); color: var(--blue); }
 </style>
 </head>
 <body>
@@ -334,8 +356,8 @@ body {
   <div class="topbar-left">
     <img src="seeedIcon.png" alt="Seeed" class="logo-img">
     <div class="title-group">
-      <div class="topbar-title" data-zh="安防行为检测" data-en="Security Behavior Detection">安防行为检测</div>
-      <div class="topbar-subtitle">reComputer J3011</div>
+      <div class="topbar-title" data-zh="工业安防行为检测" data-en="Industrial Security Detection">工业安防行为检测</div>
+      <div class="topbar-subtitle">reComputer J3011 · Jetson Orin Nano</div>
     </div>
   </div>
   <div class="topbar-right">
@@ -344,85 +366,99 @@ body {
       <button class="lang-btn" data-lang="en" onclick="switchLang('en')">EN</button>
     </div>
     <div class="conn-badge">
-      <div class="conn-dot" id="connDot"></div>
-      <span id="connText">Connecting</span>
+      <div class="conn-dot connecting" id="connDot"></div>
+      <span id="connText">--</span>
     </div>
     <div class="clock" id="clock">--:--:--</div>
   </div>
 </div>
 
 <div class="shell">
-  <!-- Metrics -->
   <div class="metrics">
     <div class="metric m-fps">
-      <div class="m-label" data-zh="帧率" data-en="FPS">帧率 / FPS</div>
+      <div class="m-label" data-zh="帧率" data-en="FPS">帧率</div>
       <div class="m-val" id="vFps">--</div>
     </div>
     <div class="metric m-det">
-      <div class="m-label" data-zh="检测人数" data-en="Detections">检测人数 / Detections</div>
+      <div class="m-label" data-zh="检测人数" data-en="DETECTIONS">检测人数</div>
       <div class="m-val" id="vDet">--</div>
     </div>
     <div class="metric m-trk">
-      <div class="m-label" data-zh="跟踪目标" data-en="Tracking">跟踪目标 / Tracking</div>
+      <div class="m-label" data-zh="跟踪目标" data-en="TRACKING">跟踪目标</div>
       <div class="m-val" id="vTrk">--</div>
     </div>
     <div class="metric m-evt">
-      <div class="m-label" data-zh="事件数量" data-en="Events">事件数量 / Events</div>
+      <div class="m-label" data-zh="事件数量" data-en="EVENTS">事件数量</div>
       <div class="m-val" id="vEvt">0</div>
     </div>
     <div class="metric m-up">
-      <div class="m-label" data-zh="运行时间" data-en="Uptime">运行时间 / Uptime</div>
+      <div class="m-label" data-zh="运行时间" data-en="UPTIME">运行时间</div>
       <div class="m-val" id="vUp">--:--</div>
     </div>
-    <div class="metric m-gpu">
-      <div class="m-label" data-zh="推理方式" data-en="Inference">推理方式 / Inference</div>
-      <div class="m-val" id="vGpu">TRT</div>
+    <div class="metric m-model">
+      <div class="m-label" data-zh="推理模型" data-en="MODEL">推理模型</div>
+      <div class="m-val" id="vModel">--</div>
     </div>
   </div>
 
-  <!-- Video -->
   <div class="video-wrap">
     <div class="panel-head">
-      <span data-zh="实时监控" data-en="Live View">实时监控 / Live View</span>
+      <span data-zh="实时监控" data-en="Live View">实时监控</span>
       <span class="sub" id="camName">--</span>
     </div>
-    <img id="stream" src="/api/stream" alt="live">
+    <div class="video-container">
+      <img id="stream" alt="live">
+      <div class="video-status" id="videoStatus">MJPEG</div>
+    </div>
   </div>
 
-  <!-- Right column -->
   <div class="right-col">
-    <!-- Events -->
     <div class="events-wrap">
       <div class="panel-head">
-        <span data-zh="事件日志" data-en="Event Log">事件日志 / Event Log</span>
-        <span class="sub" id="evtCount">0 events</span>
+        <span data-zh="事件日志" data-en="Event Log">事件日志</span>
+        <span class="sub" id="evtCount">0</span>
       </div>
       <div class="evt-scroll" id="evtList"></div>
     </div>
 
-    <!-- Controls -->
+    <div class="events-wrap" style="flex:0; min-height:auto;">
+      <div class="panel-head">
+        <span data-zh="事件截图" data-en="Snapshots">事件截图</span>
+        <span class="sub" id="snapCount">0</span>
+      </div>
+      <div class="snap-gallery" id="snapGallery">
+        <div class="snap-empty" data-zh="暂无截图" data-en="No snapshots">暂无截图</div>
+      </div>
+    </div>
+
     <div class="ctrl-wrap">
-      <div class="panel-head"><span data-zh="检测规则设置" data-en="Detection Rules">检测规则设置 / Detection Rules</span></div>
+      <div class="panel-head"><span data-zh="模型选择" data-en="Model Selection">模型选择</span></div>
+      <div class="model-list" id="modelList"></div>
+
+      <div class="panel-head"><span data-zh="检测控制" data-en="Detection Control">检测控制</span></div>
+      <button id="btnDetect" class="btn-detect on" onclick="toggleDetect()">⏹ 停止检测</button>
+
+      <div class="panel-head"><span data-zh="功能开关" data-en="Feature Toggles">功能开关</span></div>
+      <div class="feature-grid" id="featureGrid"></div>
+
+      <div class="panel-head section-gap"><span data-zh="检测规则" data-en="Detection Rules">检测规则</span></div>
       <div class="ctrl-grid">
         <div class="ctrl-field">
-          <span class="ctrl-lbl" data-zh="事件冷却时间 (秒)" data-en="Cooldown (s)">事件冷却时间 (秒) / Cooldown (s)</span>
+          <span class="ctrl-lbl" data-zh="冷却时间 (秒)" data-en="Cooldown (s)">冷却时间 (秒)</span>
           <input class="ctrl-inp" type="number" id="inCooldown" min="1" max="120" value="8">
         </div>
         <div class="ctrl-field">
-          <span class="ctrl-lbl" data-zh="徘徊检测时间 (秒)" data-en="Loiter Time (s)">徘徊检测时间 (秒) / Loiter Time (s)</span>
+          <span class="ctrl-lbl" data-zh="徘徊时间 (秒)" data-en="Loiter (s)">徘徊时间 (秒)</span>
           <input class="ctrl-inp" type="number" id="inDwell" min="3" max="300" value="10">
         </div>
         <div class="ctrl-field full">
-          <span class="ctrl-lbl" data-zh="置信度阈值" data-en="Confidence Threshold">置信度阈值 / Confidence Threshold</span>
-          <div class="slider-row">
-            <input type="range" id="inConf" min="0.1" max="0.9" step="0.05" value="0.35">
-            <span class="slider-val" id="confDisp">0.35</span>
-          </div>
+          <span class="ctrl-lbl" data-zh="置信度阈值" data-en="Confidence">置信度阈值</span>
+          <input class="ctrl-inp" type="number" id="inConf" min="0.1" max="0.9" step="0.05" value="0.35">
         </div>
-        <div class="ctrl-field full btn-row">
-          <button class="btn btn-primary" onclick="applyRules()" data-zh="应用规则" data-en="Apply Rules">应用规则 / Apply Rules</button>
-          <button class="btn btn-ghost" onclick="clearEvents()" data-zh="清空日志" data-en="Clear Log">清空日志 / Clear Log</button>
-        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="applyConfig()" data-zh="应用配置" data-en="Apply">应用配置</button>
+        <button class="btn btn-ghost" onclick="clearEvents()" data-zh="清空日志" data-en="Clear Log">清空日志</button>
       </div>
     </div>
   </div>
@@ -433,120 +469,363 @@ body {
 <script>
 const $ = id => document.getElementById(id);
 
-// Language management
-let currentLang = 'zh';
+let currentLang = localStorage.getItem('lang') || 'zh';
+let detectActive = true;
+let wsVideo = null, wsConfig = null;
+let streamMode = 'mjpeg';
+let reconnectTimer = null, reconnectAttempts = 0;
+const MAX_RECONNECT = 10;
+const wsVideoUrl = `ws://${location.hostname}:8081`;
+const wsConfigUrl = `ws://${location.hostname}:8082`;
+
+const FEATURES = [
+  { key: 'human_detect', zh: '人形检测', en: 'Human Detect' },
+  { key: 'tracking',     zh: '目标跟踪', en: 'Tracking' },
+  { key: 'zone_detection', zh: '区域检测', en: 'Zone Detect' },
+  { key: 'line_crossing', zh: '越线检测', en: 'Line Cross' },
+  { key: 'loitering',    zh: '徘徊检测', en: 'Loitering' },
+];
+
+let featureFlags = {};
+FEATURES.forEach(f => featureFlags[f.key] = true);
+
+const EVENT_LABELS = {
+  zh: { zone_enter: '区域进入', loitering: '徘徊告警', line_cross: '越线告警' },
+  en: { zone_enter: 'Zone Entry', loitering: 'Loitering', line_cross: 'Line Cross' }
+};
+
+function pad(n) { return n < 10 ? '0' + n : n; }
+
+/** Backend event timestamp: YYYYMMDD-HHMMSS → readable parts */
+function formatEvtDisplay(ts) {
+  if (!ts || ts.length < 15) return { sub: ts || '--', short: '' };
+  const datePart = ts.slice(0, 8);
+  const timePart = ts.slice(9);
+  if (datePart.length === 8 && timePart.length === 6) {
+    const sub = `${datePart.slice(0, 4)}-${datePart.slice(4, 6)}-${datePart.slice(6, 8)} ${timePart.slice(0, 2)}:${timePart.slice(2, 4)}:${timePart.slice(4, 6)}`;
+    const short = `${timePart.slice(0, 2)}:${timePart.slice(2, 4)}:${timePart.slice(4, 6)}`;
+    return { sub, short };
+  }
+  return { sub: ts, short: ts.slice(-8) };
+}
+
+let serverClockUnix = null;
+let serverClockPerfAt = null;
+let serverTzIana = 'UTC';
+
+function fmtUp(s) {
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = Math.floor(s % 60);
+  return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`;
+}
+
+function toast(msg, type) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.className = `toast show ${type || ''}`;
+  setTimeout(() => el.classList.remove('show'), 2200);
+}
+function t(zh, en) { return currentLang === 'zh' ? zh : en; }
 
 function switchLang(lang) {
   currentLang = lang;
   localStorage.setItem('lang', lang);
-  
-  // Update button states
-  document.querySelectorAll('.lang-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.lang === lang);
-  });
-  
-  // Update all translatable elements
+  document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
   document.querySelectorAll('[data-zh]').forEach(el => {
-    const zh = el.dataset.zh;
-    const en = el.dataset.en;
-    if (lang === 'zh') {
-      el.textContent = zh;
-    } else {
-      el.textContent = en;
-    }
+    el.textContent = lang === 'zh' ? el.dataset.zh : el.dataset.en;
   });
-  
-  // Update event labels
-  updateEventLabels();
-}
-
-function updateEventLabels() {
-  const labels = currentLang === 'zh' ? {
-    zone_enter: '区域进入',
-    loitering: '徘徊告警',
-    line_cross: '越线告警'
-  } : {
-    zone_enter: 'Zone Entry',
-    loitering: 'Loitering Alert',
-    line_cross: 'Line Cross Alert'
-  };
-  Object.assign(eventLabels, labels);
-  
-  // Re-render events
+  buildFeatureGrid();
+  updateDetectBtn();
   pollEvents();
-}
-
-function pad(n) { return n < 10 ? '0' + n : n; }
-
-function fmtUp(s) {
-  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
-  const sec = Math.floor(s % 60);
-  return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`;
-}
-
-function toast(msg) {
-  const el = $('toast');
-  el.textContent = msg;
-  el.classList.add('show');
-  setTimeout(() => el.classList.remove('show'), 2200);
-}
-
-function toastMsg(zh, en) {
-  toast(currentLang === 'zh' ? zh : en);
+  updateClock();
 }
 
 function updateClock() {
-  const d = new Date();
-  $('clock').textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
-setInterval(updateClock, 1000);
-updateClock();
-
-// Initialize language
-const savedLang = localStorage.getItem('lang') || 'zh';
-switchLang(savedLang);
-
-const eventLabels = {
-  zone_enter: '区域进入',
-  loitering: '徘徊告警',
-  line_cross: '越线告警'
-};
-
-function renderEvt(ev) {
-  const t = ev.event_type || 'unknown';
-  const label = eventLabels[t] || t;
-  const loc = ev.zone_name || ev.line_name || '';
-  const extra = ev.dwell_seconds ? `${ev.dwell_seconds}s` : '';
-  const detail = [loc, extra].filter(Boolean).join(' · ');
-  return `<div class="evt">
-    <div class="evt-tag tag-${t}">${label}</div>
-    <div class="evt-body">
-      <div class="evt-main">Track #${ev.track_id}${detail ? ' · ' + detail : ''}</div>
-      <div class="evt-sub">${ev.timestamp || '--'}</div>
-    </div>
-    <div class="evt-time">${ev.timestamp ? ev.timestamp.slice(-6) : ''}</div>
-  </div>`;
+  const el = $('clock');
+  let unixSec;
+  if (serverClockUnix != null && serverClockPerfAt != null) {
+    unixSec = serverClockUnix + (performance.now() - serverClockPerfAt) / 1000;
+  } else {
+    unixSec = Date.now() / 1000;
+  }
+  const d = new Date(unixSec * 1000);
+  const locale = currentLang === 'zh' ? 'zh-CN' : 'en-US';
+  const tz = serverTzIana || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  try {
+    el.textContent = new Intl.DateTimeFormat(locale, {
+      weekday: 'short',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: currentLang !== 'zh',
+      timeZone: tz,
+    }).format(d);
+  } catch (e) {
+    el.textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+  el.title = serverClockUnix != null
+    ? `${t('设备时间', 'Device time')} · ${tz}`
+    : `${t('本机时间', 'Browser time')} · ${tz}`;
 }
 
-let lastEvtLen = 0;
+function modelDisplayName(onnx) {
+  if (!onnx) return '--';
+  return onnx.replace('.onnx', '').replace('yolov', 'YOLOv').replace('yolo', 'YOLO');
+}
 
+// --- Feature toggles ---
+function buildFeatureGrid() {
+  const grid = $('featureGrid');
+  grid.innerHTML = FEATURES.map(f => {
+    const checked = featureFlags[f.key] ? 'checked' : '';
+    const active = featureFlags[f.key] ? ' active' : '';
+    const label = currentLang === 'zh' ? f.zh : f.en;
+    return `<div class="feature-item${active}" data-key="${f.key}" onclick="onFeatureClick('${f.key}')">
+      <input type="checkbox" class="feature-checkbox" ${checked} tabindex="-1">
+      <span class="feature-label">${label}</span>
+    </div>`;
+  }).join('');
+}
+
+function onFeatureClick(key) {
+  featureFlags[key] = !featureFlags[key];
+  buildFeatureGrid();
+  sendConfig();
+}
+
+// --- Detection toggle ---
+function toggleDetect() {
+  detectActive = !detectActive;
+  FEATURES.forEach(f => featureFlags[f.key] = detectActive);
+  if (detectActive) featureFlags.loitering = false;
+  buildFeatureGrid();
+  updateDetectBtn();
+  sendConfig();
+  toast(detectActive ? t('检测已启动', 'Detection started') : t('检测已停止', 'Detection stopped'),
+        detectActive ? '' : 'info');
+}
+
+function updateDetectBtn() {
+  const btn = $('btnDetect');
+  btn.className = `btn-detect ${detectActive ? 'on' : 'off'}`;
+  btn.textContent = detectActive
+    ? (currentLang === 'zh' ? '⏹ 停止检测' : '⏹ Stop Detection')
+    : (currentLang === 'zh' ? '▶ 开始检测' : '▶ Start Detection');
+}
+
+// --- Model switching ---
+let availableModels = [];
+let currentModelFile = '';
+let switchingModel = false;
+
+async function loadModels() {
+  try {
+    const r = await fetch('/api/models');
+    availableModels = await r.json();
+    renderModelList();
+  } catch(e) {}
+}
+
+function renderModelList() {
+  const list = $('modelList');
+  list.innerHTML = availableModels.map(m => {
+    const isCurrent = m.onnx_file === currentModelFile;
+    const cls = switchingModel === m.onnx_file ? 'model-card loading' : (isCurrent ? 'model-card active' : 'model-card');
+    let badge;
+    if (switchingModel === m.onnx_file) {
+      badge = `<span class="mc-badge switching">${t('切换中...','switching...')}</span>`;
+    } else if (isCurrent) {
+      badge = `<span class="mc-badge current">${t('当前','current')}</span>`;
+    } else if (m.has_engine) {
+      badge = `<span class="mc-badge ready">${t('就绪','ready')}</span>`;
+    } else {
+      badge = `<span class="mc-badge build">${t('需构建','build')}</span>`;
+    }
+    return `<div class="${cls}" onclick="selectModel('${m.onnx_file}')">
+      <div><div class="mc-name">${modelDisplayName(m.onnx_file)}</div><div class="mc-info">${m.size_mb} MB · ${m.has_engine ? 'TensorRT' : 'ONNX'}</div></div>
+      ${badge}
+    </div>`;
+  }).join('');
+}
+
+async function selectModel(onnx) {
+  if (switchingModel || onnx === currentModelFile) return;
+  switchingModel = onnx;
+  renderModelList();
+  $('vModel').textContent = '...';
+  try {
+    const r = await fetch('/api/model/switch', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ onnx_file: onnx })
+    });
+    const data = await r.json();
+    if (data.status === 'ok') {
+      currentModelFile = data.model || onnx;
+      toast(t('模型已切换: ', 'Switched to ') + modelDisplayName(currentModelFile));
+      $('vModel').textContent = modelDisplayName(currentModelFile);
+    } else {
+      toast(data.error || t('切换失败', 'Switch failed'), 'error');
+      $('vModel').textContent = modelDisplayName(currentModelFile);
+    }
+  } catch(e) {
+    toast(t('切换失败', 'Switch failed'), 'error');
+    $('vModel').textContent = modelDisplayName(currentModelFile);
+  } finally {
+    switchingModel = false;
+    renderModelList();
+    loadModels();
+  }
+}
+
+// --- Config ---
+async function sendConfig() {
+  const body = {
+    features: featureFlags,
+    rules: {
+      event_cooldown_seconds: parseFloat($('inCooldown').value) || 8,
+      zones: [{
+        name: 'restricted_area',
+        dwell_seconds: parseFloat($('inDwell').value) || 10,
+        color_bgr: [0, 255, 255],
+        points: [[0.6, 0.22], [0.94, 0.22], [0.94, 0.88], [0.6, 0.88]]
+      }]
+    },
+    detector: {
+      conf_threshold: parseFloat($('inConf').value) || 0.35
+    }
+  };
+  try {
+    if (wsConfig && wsConfig.readyState === WebSocket.OPEN) {
+      wsConfig.send(JSON.stringify(body));
+    } else {
+      await fetch('/api/config', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body)
+      });
+    }
+  } catch(e) {}
+}
+
+function applyConfig() {
+  sendConfig();
+  toast(t('配置已应用', 'Config applied'));
+}
+
+function clearEvents() {
+  $('evtList').innerHTML = '';
+  $('evtCount').textContent = '0';
+  $('vEvt').textContent = '0';
+  fetch('/api/events/clear', { method: 'POST' });
+  toast(t('日志已清空', 'Log cleared'), 'info');
+}
+
+// --- Connection ---
+function setConnStatus(status) {
+  const dot = $('connDot');
+  dot.className = 'conn-dot' + (status === 'off' ? ' off' : status === 'connecting' ? ' connecting' : '');
+}
+
+function connectWebSocket() {
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  setConnStatus('connecting');
+  $('connText').textContent = t('连接中...', 'Connecting...');
+
+  try {
+    if (wsVideo) wsVideo.close();
+    wsVideo = new WebSocket(wsVideoUrl);
+    wsVideo.binaryType = 'arraybuffer';
+
+    wsVideo.onopen = function() {
+      reconnectAttempts = 0;
+      streamMode = 'ws';
+      setConnStatus('on');
+      $('connText').textContent = 'WebSocket';
+      $('videoStatus').textContent = 'WS';
+    };
+
+    wsVideo.onmessage = function(event) {
+      if (event.data instanceof ArrayBuffer && event.data.byteLength > 0) {
+        const blob = new Blob([event.data], { type: 'image/jpeg' });
+        const url = URL.createObjectURL(blob);
+        const img = $('stream');
+        const old = img.src;
+        img.src = url;
+        if (old && old.startsWith('blob:')) URL.revokeObjectURL(old);
+      }
+    };
+
+    wsVideo.onclose = function() {
+      streamMode = 'mjpeg';
+      $('stream').src = '/api/stream';
+      $('videoStatus').textContent = 'MJPEG';
+      setConnStatus('off');
+      $('connText').textContent = 'MJPEG';
+      scheduleReconnect();
+    };
+
+    wsVideo.onerror = function() {
+      if (wsVideo.readyState === WebSocket.CONNECTING) wsVideo.close();
+    };
+  } catch(e) {
+    streamMode = 'mjpeg';
+    $('stream').src = '/api/stream';
+    setConnStatus('off');
+    scheduleReconnect();
+  }
+
+  try {
+    if (wsConfig) wsConfig.close();
+    wsConfig = new WebSocket(wsConfigUrl);
+    wsConfig.onopen = function() {};
+    wsConfig.onmessage = function(event) {
+      try { JSON.parse(event.data); } catch(e) {}
+    };
+    wsConfig.onerror = function() {};
+    wsConfig.onclose = function() {};
+  } catch(e) {}
+}
+
+function scheduleReconnect() {
+  if (reconnectAttempts >= MAX_RECONNECT) return;
+  const delay = Math.min(2000 * Math.pow(1.5, reconnectAttempts), 30000);
+  reconnectAttempts++;
+  reconnectTimer = setTimeout(connectWebSocket, delay);
+}
+
+// --- Polling ---
 async function pollStats() {
   try {
     const r = await fetch('/api/stats');
     const d = await r.json();
-    console.log('Stats data:', d);
-    $('vFps').textContent = d.fps?.toFixed(1) ?? '--';
-    $('vDet').textContent = d.detections ?? '--';
-    $('vTrk').textContent = d.tracks ?? '--';
+    $('vFps').textContent = d.fps > 0 ? d.fps.toFixed(1) : '0.0';
+    $('vDet').textContent = d.detections ?? 0;
+    $('vTrk').textContent = d.tracks ?? 0;
     $('vEvt').textContent = d.total_events ?? 0;
     $('vUp').textContent = fmtUp(d.uptime_seconds || 0);
-    $('connDot').classList.remove('off');
-    const fpsText = currentLang === 'zh' ? `${d.fps?.toFixed(0) || 0} FPS` : `${d.fps?.toFixed(0) || 0} FPS`;
-    $('connText').textContent = fpsText;
+    if (d.server_time_unix != null && d.server_tz_iana) {
+      serverClockUnix = d.server_time_unix;
+      serverClockPerfAt = performance.now();
+      serverTzIana = d.server_tz_iana;
+    }
+    if (d.current_model && !switchingModel) {
+      $('vModel').textContent = modelDisplayName(d.current_model);
+      if (currentModelFile !== d.current_model) {
+        currentModelFile = d.current_model;
+        renderModelList();
+      }
+    }
+    if (!wsVideo || wsVideo.readyState !== WebSocket.OPEN) {
+      setConnStatus('on');
+      $('connText').textContent = 'HTTP';
+    }
   } catch(e) {
-    console.error('Poll stats error:', e);
-    $('connDot').classList.add('off');
-    $('connText').textContent = currentLang === 'zh' ? '离线' : 'Offline';
+    if (!wsVideo || wsVideo.readyState !== WebSocket.OPEN) {
+      setConnStatus('off');
+      $('connText').textContent = t('离线', 'Offline');
+    }
   }
 }
 
@@ -554,67 +833,88 @@ async function pollEvents() {
   try {
     const r = await fetch('/api/events');
     const evts = await r.json();
-    $('evtList').innerHTML = evts.slice().reverse().map(renderEvt).join('');
-    const evtText = currentLang === 'zh' ? `${evts.length} 个事件` : `${evts.length} events`;
-    $('evtCount').textContent = evtText;
-    if (evts.length > lastEvtLen && lastEvtLen > 0) {
-      const newest = evts[evts.length - 1];
-      toast(`${eventLabels[newest.event_type] || newest.event_type} — Track #${newest.track_id}`);
-    }
-    lastEvtLen = evts.length;
+    const labels = EVENT_LABELS[currentLang] || EVENT_LABELS.zh;
+    $('evtList').innerHTML = evts.slice().reverse().map(ev => {
+      const etype = ev.event_type || 'unknown';
+      const label = labels[etype] || etype;
+      const loc = ev.zone_name || ev.line_name || '';
+      const extra = ev.dwell_seconds ? `${ev.dwell_seconds}s` : '';
+      const detail = [loc, extra].filter(Boolean).join(' · ');
+      const tsFmt = formatEvtDisplay(ev.timestamp);
+      return `<div class="evt">
+        <div class="evt-tag tag-${etype}">${label}</div>
+        <div class="evt-body">
+          <div class="evt-main">Track #${ev.track_id}${detail ? ' · ' + detail : ''}</div>
+          <div class="evt-sub">${tsFmt.sub}</div>
+        </div>
+        <div class="evt-time">${tsFmt.short}</div>
+      </div>`;
+    }).join('');
+    $('evtCount').textContent = evts.length;
   } catch(e) {}
+}
+
+async function pollSnapshots() {
+  try {
+    const r = await fetch('/api/events/images');
+    const imgs = await r.json();
+    const gallery = $('snapGallery');
+    $('snapCount').textContent = imgs.length;
+    if (imgs.length === 0) {
+      gallery.innerHTML = `<div class="snap-empty">${t('暂无截图','No snapshots')}</div>`;
+      return;
+    }
+    gallery.innerHTML = imgs.map(img =>
+      `<img class="snap-thumb" src="${img.url}" loading="lazy" onclick="viewSnap('${img.url}')" title="${img.name}">`
+    ).join('');
+  } catch(e) {}
+}
+
+function viewSnap(url) {
+  const ov = document.createElement('div');
+  ov.className = 'snap-overlay';
+  ov.innerHTML = `<img src="${url}">`;
+  ov.onclick = () => ov.remove();
+  document.body.appendChild(ov);
 }
 
 async function loadConfig() {
   try {
     const r = await fetch('/api/config');
     const c = await r.json();
-    const camName = c.camera?.name || 'Camera';
-    $('camName').textContent = currentLang === 'zh' ? `${camName} 摄像头` : `${camName} Camera`;
+    $('camName').textContent = c.camera?.name || 'Camera';
     const rules = c.rules || {};
     $('inCooldown').value = rules.event_cooldown_seconds || 8;
     if (rules.zones?.length) $('inDwell').value = rules.zones[0].dwell_seconds || 10;
-    if (c.detector?.conf_threshold) {
-      $('inConf').value = c.detector.conf_threshold;
-      $('confDisp').textContent = c.detector.conf_threshold;
+    if (c.detector?.conf_threshold) $('inConf').value = c.detector.conf_threshold;
+    if (c.features) {
+      for (const k in c.features) featureFlags[k] = c.features[k];
+      detectActive = featureFlags.human_detect;
+      buildFeatureGrid();
+      updateDetectBtn();
     }
   } catch(e) {}
 }
 
-async function applyRules() {
-  const body = {
-    event_cooldown_seconds: parseFloat($('inCooldown').value),
-    zones: [{
-      name: 'restricted_area',
-      dwell_seconds: parseFloat($('inDwell').value),
-      color_bgr: [0, 255, 255],
-      points: [[0.6, 0.22], [0.94, 0.22], [0.94, 0.88], [0.6, 0.88]]
-    }]
-  };
-  try {
-    await fetch('/api/rules', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
-    toastMsg('规则已应用', 'Rules applied');
-  } catch(e) { toastMsg('应用失败', 'Failed to apply'); }
-}
+// --- Init ---
+switchLang(currentLang);
+buildFeatureGrid();
+updateDetectBtn();
+setInterval(updateClock, 1000);
+updateClock();
 
-function clearEvents() {
-  $('evtList').innerHTML = '';
-  $('evtCount').textContent = currentLang === 'zh' ? '0 个事件' : '0 events';
-  $('vEvt').textContent = '0';
-  lastEvtLen = 0;
-  toastMsg('日志已清空', 'Log cleared');
-}
-
-$('inConf').addEventListener('input', function() {
-  $('confDisp').textContent = this.value;
-});
-
-setInterval(pollStats, 1000);
-setInterval(pollEvents, 2000);
-setInterval(loadConfig, 5000);
-loadConfig();
-pollStats();
-pollEvents();
+(async function init() {
+  await loadConfig();
+  loadModels();
+  connectWebSocket();
+  pollStats();
+  pollEvents();
+  pollSnapshots();
+  setInterval(pollStats, 1000);
+  setInterval(pollEvents, 3000);
+  setInterval(pollSnapshots, 5000);
+  setInterval(loadModels, 60000);
+})();
 </script>
 </body>
 </html>

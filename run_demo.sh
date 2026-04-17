@@ -4,7 +4,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_PATH="${SCRIPT_DIR}/config/demo_config.json"
 
-# If started from SSH, try to reuse the active HDMI desktop session.
 if [[ -z "${DISPLAY:-}" ]]; then
   for candidate_display in :1 :0; do
     if [[ -S "/tmp/.X11-unix/X${candidate_display#:}" ]]; then
@@ -26,5 +25,9 @@ if [[ -z "${XAUTHORITY:-}" ]]; then
   done
 fi
 
+if [[ -d /usr/share/fonts ]] && [[ -z "${QT_QPA_FONTDIR:-}" ]]; then
+    export QT_QPA_FONTDIR=/usr/share/fonts/truetype/dejavu:/usr/share/fonts/truetype
+fi
+
 echo "Launching demo with DISPLAY=${DISPLAY:-unset} XAUTHORITY=${XAUTHORITY:-unset}"
-python3 "${SCRIPT_DIR}/app/behavior_demo.py" --config "${CONFIG_PATH}" "$@"
+python3 -u "${SCRIPT_DIR}/app/behavior_demo.py" --config "${CONFIG_PATH}" "$@"

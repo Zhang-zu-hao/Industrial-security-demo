@@ -12,12 +12,23 @@ import json
 import os
 import threading
 import time
+from datetime import datetime
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import cv2
 import numpy as np
+
+
+def _server_clock_meta() -> Dict[str, Any]:
+    """Wall-clock fields for dashboard (device time, not browser time)."""
+    now = datetime.now().astimezone()
+    tz = getattr(now.tzinfo, "key", None) or "UTC"
+    return {
+        "server_time_unix": time.time(),
+        "server_tz_iana": tz,
+    }
 
 
 class FrameBuffer:
@@ -29,7 +40,8 @@ class FrameBuffer:
         self._event = threading.Event()
 
     def update(self, frame: np.ndarray) -> None:
-        ok, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+        # Use maximum JPEG quality (95) for best image quality
+        ok, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
         if not ok:
             return
         with self._lock:
@@ -78,21 +90,34 @@ class StatsCollector:
         self.detections: int = 0
         self.tracks: int = 0
         self.uptime_start: float = time.time()
+        self._last_update: float = 0.0
 
     def update(self, fps: float, detections: int, tracks: int) -> None:
         with self._lock:
             self.fps = fps
             self.detections = detections
             self.tracks = tracks
+            self._last_update = time.time()
 
     def snapshot(self) -> Dict[str, Any]:
         with self._lock:
+            # If no update in last 5 seconds, reset stats to show disconnected
+            if time.time() - self._last_update > 5.0 and self._last_update > 0:
+                return {
+                    "fps": 0.0,
+                    "detections": 0,
+                    "tracks": 0,
+                    "uptime_seconds": round(time.time() - self.uptime_start, 1),
+                    "total_events": event_store.total,
+                    **_server_clock_meta(),
+                }
             return {
                 "fps": round(self.fps, 2),
                 "detections": self.detections,
                 "tracks": self.tracks,
                 "uptime_seconds": round(time.time() - self.uptime_start, 1),
                 "total_events": event_store.total,
+                **_server_clock_meta(),
             }
 
 
@@ -116,8 +141,17 @@ def get_config_snapshot() -> Dict:
 
 
 def update_rules(new_rules: Dict) -> None:
+    global _config_ref
     with _config_lock:
-        _config_ref["rules"].update(new_rules)
+        # Update rules section
+        if "rules" in _config_ref:
+            _config_ref["rules"].update(new_rules)
+        else:
+            _config_ref["rules"] = new_rules
+        
+        # Also update detector config if confidence threshold is provided
+        if "conf_threshold" in new_rules and "detector" in _config_ref:
+            _config_ref["detector"]["conf_threshold"] = new_rules["conf_threshold"]
 
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "web"

@@ -1,7 +1,7 @@
 {
   "camera": {
     "name": "poe-camera-1",
-    "source": "rtsp://admin:@192.168.1.10/Streaming/Channels/101",
+    "source": "rtsp://admin:@192.168.3.10/Streaming/Channels/101",
     "use_gstreamer": true,
     "notes": "use_gstreamer enables Jetson NVDEC hardware decode, set false to fall back to CPU"
   },
@@ -44,7 +44,7 @@
   "display": {
     "show_window": true,
     "window_name": "Industrial Security Demo",
-    "resize_width": 640
+    "resize_width": 1280
   },
   "web": {
     "port": 8080

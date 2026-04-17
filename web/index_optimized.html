@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Industrial Security - Optimized</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;500;700&display=swap');
+
+:root {
+  --bg: #0a0c10;
+  --surface: #12151c;
+  --surface2: #181c26;
+  --border: #1e2330;
+  --accent: #22d3a7;
+  --danger: #ef4444;
+  --warn: #f59e0b;
+  --blue: #3b82f6;
+  --purple: #a855f7;
+  --text: #e8eaed;
+  --text2: #7c829d;
+  --mono: 'JetBrains Mono', monospace;
+  --sans: 'Noto Sans SC', system-ui, sans-serif;
+  --radius: 8px;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+  height: 100vh;
+}
+
+/* Top bar */
+.topbar {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.topbar-left { display: flex; align-items: center; gap: 12px; }
+.logo-img { height: 32px; width: auto; }
+.title-group { display: flex; flex-direction: column; gap: 2px; }
+.topbar-title { font-size: 15px; font-weight: 700; color: var(--text); }
+.topbar-subtitle { font-size: 11px; color: var(--text2); }
+.topbar-right { display: flex; align-items: center; gap: 16px; }
+.lang-switch { display: flex; align-items: center; gap: 4px; font-size: 11px; }
+.lang-btn {
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text2);
+  font-size: 11px;
+  cursor: pointer;
+}
+.lang-btn.active { background: var(--accent); color: #000; border-color: var(--accent); }
+.conn-badge { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text2); font-family: var(--mono); }
+.conn-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+.conn-dot.off { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
+.clock { font-family: var(--mono); font-size: 11px; color: var(--text3); text-align: right; line-height: 1.25; max-width: 200px; white-space: nowrap; }
+
+/* Layout */
+.shell {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  grid-template-rows: auto 1fr;
+  gap: 12px;
+  padding: 12px 16px;
+  height: calc(100vh - 48px);
+}
+
+/* Metrics */
+.metrics {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+}
+.metric {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  position: relative;
+  overflow: hidden;
+}
+.metric::before { content: ''; position: absolute; top: 0; left: 0; width: 3px; height: 100%; }
+.metric.m-fps::before { background: var(--accent); }
+.metric.m-det::before { background: var(--blue); }
+.metric.m-trk::before { background: var(--purple); }
+.metric.m-evt::before { background: var(--warn); }
+.metric.m-up::before { background: var(--text3); }
+.metric.m-gpu::before { background: var(--danger); }
+.m-label { font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 1.2px; color: var(--text2); margin-bottom: 4px; }
+.m-val { font-family: var(--mono); font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.m-fps .m-val { color: var(--accent); }
+.m-det .m-val { color: var(--blue); }
+.m-trk .m-val { color: var(--purple); }
+.m-evt .m-val { color: var(--warn); }
+
+/* Video panel */
+.video-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px; font-weight: 600;
+}
+.video-container {
+  flex: 1;
+  background: #000;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#stream { max-width: 100%; max-height: 100%; object-fit: contain; }
+.video-status {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: rgba(0,0,0,0.7);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: var(--mono);
+}
+
+/* Right column */
+.right-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+/* Events */
+.events-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.evt-scroll { flex: 1; overflow-y: auto; padding: 2px 0; }
+.evt {
+  display: grid;
+  grid-template-columns: 56px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+}
+.evt-tag {
+  padding: 2px 0;
+  text-align: center;
+  border-radius: 4px;
+  font-size: 9px; font-weight: 700;
+  text-transform: uppercase;
+}
+.tag-zone_enter { background: rgba(34,211,167,0.12); color: var(--accent); }
+.tag-loitering { background: rgba(245,158,11,0.12); color: var(--warn); }
+.tag-line_cross { background: rgba(239,68,68,0.12); color: var(--danger); }
+.evt-body { min-width: 0; }
+.evt-main { color: var(--text); font-weight: 500; }
+.evt-sub { color: var(--text2); font-family: var(--mono); font-size: 10px; }
+.evt-time { color: var(--text3); font-family: var(--mono); font-size: 10px; white-space: nowrap; }
+
+/* Controls */
+.ctrl-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+.ctrl-wrap .panel-head { padding: 0 0 8px 0; border: none; }
+.ctrl-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.ctrl-field { display: flex; flex-direction: column; gap: 3px; }
+.ctrl-field.full { grid-column: 1 / -1; }
+.ctrl-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text2); }
+.ctrl-inp {
+  padding: 6px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.ctrl-inp:focus { border-color: var(--accent); }
+
+/* Feature toggles */
+.feature-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 8px;
+}
+.feature-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.feature-item:hover { border-color: var(--text2); }
+.feature-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+.feature-label {
+  font-size: 11px;
+  color: var(--text);
+  cursor: pointer;
+}
+.feature-item.active {
+  border-color: var(--accent);
+  background: rgba(34,211,167,0.08);
+}
+
+/* Buttons */
+.btn-row { display: flex; gap: 8px; margin-top: 4px; }
+.btn {
+  flex: 1;
+  padding: 7px 12px;
+  border: none;
+  border-radius: 5px;
+  font-size: 12px; font-weight: 600;
+  cursor: pointer;
+}
+.btn-primary { background: var(--accent); color: #000; }
+.btn-primary:hover { filter: brightness(1.15); }
+.btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text2); }
+.btn-ghost:hover { border-color: var(--text2); color: var(--text); }
+
+/* Quality slider */
+.quality-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.quality-row input[type=range] { flex: 1; accent-color: var(--accent); }
+.quality-val { font-family: var(--mono); font-size: 12px; color: var(--accent); min-width: 40px; text-align: right; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-hl); border-radius: 2px; }
+
+/* Toast */
+.toast {
+  position: fixed; bottom: 20px; right: 20px;
+  padding: 10px 18px;
+  background: var(--surface2);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  font-size: 12px; color: var(--accent);
+  transform: translateY(80px);
+  opacity: 0;
+  transition: all 0.3s;
+  z-index: 999;
+}
+.toast.show { transform: translateY(0); opacity: 1; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <img src="seeedIcon.png" alt="Seeed" class="logo-img">
+    <div class="title-group">
+      <div class="topbar-title" data-zh="安防行为检测" data-en="Security Behavior Detection">安防行为检测</div>
+      <div class="topbar-subtitle">reComputer J3011 - Optimized</div>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <div class="lang-switch">
+      <button class="lang-btn active" data-lang="zh" onclick="switchLang('zh')">中文</button>
+      <button class="lang-btn" data-lang="en" onclick="switchLang('en')">EN</button>
+    </div>
+    <div class="conn-badge">
+      <div class="conn-dot" id="connDot"></div>
+      <span id="connText">Connecting</span>
+    </div>
+    <div class="clock" id="clock">--:--:--</div>
+  </div>
+</div>
+
+<div class="shell">
+  <!-- Metrics -->
+  <div class="metrics">
+    <div class="metric m-fps">
+      <div class="m-label" data-zh="帧率" data-en="FPS">帧率 / FPS</div>
+      <div class="m-val" id="vFps">--</div>
+    </div>
+    <div class="metric m-det">
+      <div class="m-label" data-zh="检测人数" data-en="Detections">检测人数 / Detections</div>
+      <div class="m-val" id="vDet">--</div>
+    </div>
+    <div class="metric m-trk">
+      <div class="m-label" data-zh="跟踪目标" data-en="Tracking">跟踪目标 / Tracking</div>
+      <div class="m-val" id="vTrk">--</div>
+    </div>
+    <div class="metric m-evt">
+      <div class="m-label" data-zh="事件数量" data-en="Events">事件数量 / Events</div>
+      <div class="m-val" id="vEvt">0</div>
+    </div>
+    <div class="metric m-up">
+      <div class="m-label" data-zh="运行时间" data-en="Uptime">运行时间 / Uptime</div>
+      <div class="m-val" id="vUp">--:--</div>
+    </div>
+    <div class="metric m-gpu">
+      <div class="m-label" data-zh="流类型" data-en="Stream">流类型 / Stream</div>
+      <div class="m-val" id="vStream">WS</div>
+    </div>
+  </div>
+
+  <!-- Video -->
+  <div class="video-wrap">
+    <div class="panel-head">
+      <span data-zh="实时监控" data-en="Live View">实时监控 / Live View</span>
+      <span class="sub" id="camName">--</span>
+    </div>
+    <div class="video-container">
+      <img id="stream" src="" alt="live">
+      <div class="video-status" id="videoStatus">WebSocket: 未连接</div>
+    </div>
+  </div>
+
+  <!-- Right column -->
+  <div class="right-col">
+    <!-- Events -->
+    <div class="events-wrap">
+      <div class="panel-head">
+        <span data-zh="事件日志" data-en="Event Log">事件日志 / Event Log</span>
+        <span class="sub" id="evtCount">0 events</span>
+      </div>
+      <div class="evt-scroll" id="evtList"></div>
+    </div>
+
+    <!-- Controls -->
+    <div class="ctrl-wrap">
+      <div class="panel-head"><span data-zh="功能开关" data-en="Feature Toggles">功能开关 / Feature Toggles</span></div>
+      <div class="feature-grid" id="featureGrid">
+        <div class="feature-item active" onclick="toggleFeature('human_detect')">
+          <input type="checkbox" class="feature-checkbox" id="feat_human" checked onchange="updateFeatures()">
+          <label class="feature-label" for="feat_human" data-zh="人形检测" data-en="Human Detect">人形检测</label>
+        </div>
+        <div class="feature-item active" onclick="toggleFeature('tracking')">
+          <input type="checkbox" class="feature-checkbox" id="feat_track" checked onchange="updateFeatures()">
+          <label class="feature-label" for="feat_track" data-zh="目标跟踪" data-en="Tracking">目标跟踪</label>
+        </div>
+        <div class="feature-item active" onclick="toggleFeature('zone_detection')">
+          <input type="checkbox" class="feature-checkbox" id="feat_zone" checked onchange="updateFeatures()">
+          <label class="feature-label" for="feat_zone" data-zh="区域检测" data-en="Zone Detection">区域检测</label>
+        </div>
+        <div class="feature-item active" onclick="toggleFeature('line_crossing')">
+          <input type="checkbox" class="feature-checkbox" id="feat_line" checked onchange="updateFeatures()">
+          <label class="feature-label" for="feat_line" data-zh="越线检测" data-en="Line Crossing">越线检测</label>
+        </div>
+        <div class="feature-item" onclick="toggleFeature('loitering')">
+          <input type="checkbox" class="feature-checkbox" id="feat_loiter" onchange="updateFeatures()">
+          <label class="feature-label" for="feat_loiter" data-zh="徘徊检测" data-en="Loitering">徘徊检测</label>
+        </div>
+      </div>
+
+      <div class="panel-head" style="margin-top: 12px;"><span data-zh="画质设置" data-en="Quality Settings">画质设置 / Quality Settings</span></div>
+      <div class="quality-row">
+        <span class="ctrl-lbl" data-zh="JPEG 质量" data-en="JPEG Quality">JPEG 质量</span>
+        <input type="range" id="qualitySlider" min="50" max="95" step="5" value="85">
+        <span class="quality-val" id="qualityVal">85</span>
+      </div>
+
+      <div class="panel-head" style="margin-top: 12px;"><span data-zh="检测规则" data-en="Detection Rules">检测规则 / Detection Rules</span></div>
+      <div class="ctrl-grid">
+        <div class="ctrl-field">
+          <span class="ctrl-lbl" data-zh="事件冷却 (秒)" data-en="Cooldown (s)">事件冷却 (秒)</span>
+          <input class="ctrl-inp" type="number" id="inCooldown" min="1" max="120" value="8">
+        </div>
+        <div class="ctrl-field">
+          <span class="ctrl-lbl" data-zh="徘徊时间 (秒)" data-en="Loiter Time (s)">徘徊时间 (秒)</span>
+          <input class="ctrl-inp" type="number" id="inDwell" min="3" max="300" value="10">
+        </div>
+        <div class="ctrl-field full">
+          <span class="ctrl-lbl" data-zh="置信度阈值" data-en="Confidence">置信度阈值</span>
+          <input class="ctrl-inp" type="number" id="inConf" min="0.1" max="0.9" step="0.05" value="0.25">
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="applyConfig()" data-zh="应用配置" data-en="Apply Config">应用配置</button>
+        <button class="btn btn-ghost" onclick="clearEvents()" data-zh="清空日志" data-en="Clear Log">清空日志</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// Language management
+let currentLang = 'zh';
+function switchLang(lang) {
+  currentLang = lang;
+  localStorage.setItem('lang', lang);
+  document.querySelectorAll('.lang-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.lang === lang);
+  });
+  document.querySelectorAll('[data-zh]').forEach(el => {
+    el.textContent = lang === 'zh' ? el.dataset.zh : el.dataset.en;
+  });
+  updateEventLabels();
+  updateClock();
+}
+
+const eventLabels = {
+  zone_enter: '区域进入',
+  loitering: '徘徊告警',
+  line_cross: '越线告警'
+};
+
+function updateEventLabels() {
+  const labels = currentLang === 'zh' ? {
+    zone_enter: '区域进入',
+    loitering: '徘徊告警',
+    line_cross: '越线告警'
+  } : {
+    zone_enter: 'Zone Entry',
+    loitering: 'Loitering Alert',
+    line_cross: 'Line Cross Alert'
+  };
+  Object.assign(eventLabels, labels);
+  pollEvents();
+}
+
+function pad(n) { return n < 10 ? '0' + n : n; }
+
+function formatEvtDisplay(ts) {
+  if (!ts || ts.length < 15) return { sub: ts || '--', short: '' };
+  const datePart = ts.slice(0, 8);
+  const timePart = ts.slice(9);
+  if (datePart.length === 8 && timePart.length === 6) {
+    const sub = `${datePart.slice(0, 4)}-${datePart.slice(4, 6)}-${datePart.slice(6, 8)} ${timePart.slice(0, 2)}:${timePart.slice(2, 4)}:${timePart.slice(4, 6)}`;
+    const short = `${timePart.slice(0, 2)}:${timePart.slice(2, 4)}:${timePart.slice(4, 6)}`;
+    return { sub, short };
+  }
+  return { sub: ts, short: ts.slice(-8) };
+}
+
+let serverClockUnix = null;
+let serverClockPerfAt = null;
+let serverTzIana = 'UTC';
+
+function fmtUp(s) {
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  const sec = Math.floor(s % 60);
+  return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`;
+}
+function toast(msg) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2200);
+}
+function toastMsg(zh, en) {
+  toast(currentLang === 'zh' ? zh : en);
+}
+
+function updateClock() {
+  const el = $('clock');
+  let unixSec;
+  if (serverClockUnix != null && serverClockPerfAt != null) {
+    unixSec = serverClockUnix + (performance.now() - serverClockPerfAt) / 1000;
+  } else {
+    unixSec = Date.now() / 1000;
+  }
+  const d = new Date(unixSec * 1000);
+  const locale = currentLang === 'zh' ? 'zh-CN' : 'en-US';
+  const tz = serverTzIana || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  try {
+    el.textContent = new Intl.DateTimeFormat(locale, {
+      weekday: 'short',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: currentLang !== 'zh',
+      timeZone: tz,
+    }).format(d);
+  } catch (e) {
+    el.textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+  el.title = serverClockUnix != null
+    ? `Device time · ${tz}`
+    : `Browser time · ${tz}`;
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// Initialize language
+const savedLang = localStorage.getItem('lang') || 'zh';
+switchLang(savedLang);
+
+// Feature toggles
+let featureFlags = {
+  human_detect: true,
+  tracking: true,
+  zone_detection: true,
+  line_crossing: true,
+  loitering: false
+};
+
+function toggleFeature(feature) {
+  const checkbox = $(`feat_${feature.replace('_', '')}`);
+  if (checkbox) {
+    checkbox.checked = !checkbox.checked;
+    updateFeatures();
+  }
+}
+
+function updateFeatures() {
+  featureFlags = {
+    human_detect: $('feat_human')?.checked || false,
+    tracking: $('feat_track')?.checked || false,
+    zone_detection: $('feat_zone')?.checked || false,
+    line_crossing: $('feat_line')?.checked || false,
+    loitering: $('feat_loiter')?.checked || false
+  };
+  
+  // Update UI
+  document.querySelectorAll('.feature-item').forEach(item => {
+    const checkbox = item.querySelector('input[type=checkbox]');
+    item.classList.toggle('active', checkbox?.checked);
+  });
+}
+
+// WebSocket connection
+let ws = null;
+let wsConnected = false;
+const wsUrl = `ws://${window.location.hostname}:8081`;
+
+function connectWebSocket() {
+  try {
+    ws = new WebSocket(wsUrl);
+    
+    ws.onopen = function() {
+      wsConnected = true;
+      $('videoStatus').textContent = `WebSocket: 已连接 (${window.location.hostname}:8081)`;
+      $('connDot').classList.remove('off');
+      $('connText').textContent = 'WebSocket';
+      $('vStream').textContent = 'WS';
+      console.log('WebSocket connected');
+    };
+    
+    ws.onclose = function() {
+      wsConnected = false;
+      $('videoStatus').textContent = 'WebSocket: 已断开 - 切换到 HTTP';
+      $('connDot').classList.add('off');
+      $('connText').textContent = 'HTTP Fallback';
+      $('vStream').textContent = 'HTTP';
+      console.log('WebSocket disconnected, falling back to HTTP');
+      
+      // Fallback to HTTP MJPEG
+      $('stream').src = '/api/stream';
+      
+      // Reconnect after 3 seconds
+      setTimeout(connectWebSocket, 3000);
+    };
+    
+    ws.onerror = function(error) {
+      console.error('WebSocket error:', error);
+    };
+    
+    ws.onmessage = function(event) {
+      // Receive JPEG frame as blob
+      if (event.data instanceof Blob) {
+        const url = URL.createObjectURL(event.data);
+        $('stream').src = url;
+        // Clean up old URL
+        setTimeout(() => URL.revokeObjectURL(url), 100);
+      }
+    };
+  } catch (e) {
+    console.error('WebSocket connection failed:', e);
+    // Fallback to HTTP
+    $('stream').src = '/api/stream';
+  }
+}
+
+// Stats polling
+async function pollStats() {
+  try {
+    const r = await fetch('/api/stats');
+    const d = await r.json();
+    
+    $('vFps').textContent = (d.fps !== undefined && d.fps > 0) ? d.fps.toFixed(1) : '0.0';
+    $('vDet').textContent = (d.detections !== undefined) ? d.detections : '0';
+    $('vTrk').textContent = (d.tracks !== undefined) ? d.tracks : '0';
+    $('vEvt').textContent = (d.total_events !== undefined) ? d.total_events : '0';
+    $('vUp').textContent = fmtUp(d.uptime_seconds || 0);
+    if (d.server_time_unix != null && d.server_tz_iana) {
+      serverClockUnix = d.server_time_unix;
+      serverClockPerfAt = performance.now();
+      serverTzIana = d.server_tz_iana;
+    }
+
+    if (wsConnected) {
+      $('connDot').classList.remove('off');
+      $('connText').textContent = `${(d.fps || 0).toFixed(0)} FPS`;
+    }
+  } catch(e) {
+    console.error('Poll stats error:', e);
+    $('connDot').classList.add('off');
+    $('vFps').textContent = '0.0';
+    $('vDet').textContent = '0';
+    $('vTrk').textContent = '0';
+  }
+}
+
+// Events polling
+async function pollEvents() {
+  try {
+    const r = await fetch('/api/events');
+    const evts = await r.json();
+    $('evtList').innerHTML = evts.slice().reverse().map(renderEvt).join('');
+    $('evtCount').textContent = `${evts.length} events`;
+  } catch(e) {}
+}
+
+function renderEvt(ev) {
+  const t = ev.event_type || 'unknown';
+  const label = eventLabels[t] || t;
+  const loc = ev.zone_name || ev.line_name || '';
+  const extra = ev.dwell_seconds ? `${ev.dwell_seconds}s` : '';
+  const detail = [loc, extra].filter(Boolean).join(' · ');
+  const tsFmt = formatEvtDisplay(ev.timestamp);
+  return `<div class="evt">
+    <div class="evt-tag tag-${t}">${label}</div>
+    <div class="evt-body">
+      <div class="evt-main">Track #${ev.track_id}${detail ? ' · ' + detail : ''}</div>
+      <div class="evt-sub">${tsFmt.sub}</div>
+    </div>
+    <div class="evt-time">${tsFmt.short}</div>
+  </div>`;
+}
+
+// Config management
+async function loadConfig() {
+  try {
+    const r = await fetch('/api/config');
+    const c = await r.json();
+    const camName = c.camera?.name || 'Camera';
+    $('camName').textContent = camName;
+    const rules = c.rules || {};
+    $('inCooldown').value = rules.event_cooldown_seconds || 8;
+    if (rules.zones?.length) $('inDwell').value = rules.zones[0].dwell_seconds || 10;
+    if (c.detector?.conf_threshold) $('inConf').value = c.detector.conf_threshold;
+    
+    // Load feature flags
+    if (c.features) {
+      featureFlags = c.features;
+      $('feat_human').checked = featureFlags.human_detect || false;
+      $('feat_track').checked = featureFlags.tracking || false;
+      $('feat_zone').checked = featureFlags.zone_detection || false;
+      $('feat_line').checked = featureFlags.line_crossing || false;
+      $('feat_loiter').checked = featureFlags.loitering || false;
+      updateFeatures();
+    }
+  } catch(e) {}
+}
+
+async function applyConfig() {
+  const body = {
+    rules: {
+      event_cooldown_seconds: parseFloat($('inCooldown').value),
+      zones: [{
+        name: 'restricted_area',
+        dwell_seconds: parseFloat($('inDwell').value),
+        color_bgr: [0, 255, 255],
+        points: [[0.6, 0.22], [0.94, 0.22], [0.94, 0.88], [0.6, 0.88]]
+      }]
+    },
+    detector: {
+      conf_threshold: parseFloat($('inConf').value)
+    },
+    features: featureFlags
+  };
+  
+  try {
+    // Send via WebSocket if connected
+    if (wsConnected && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(body));
+    } else {
+      await fetch('/api/config', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body)
+      });
+    }
+    toastMsg('配置已应用', 'Config applied');
+  } catch(e) {
+    toastMsg('应用失败', 'Failed to apply');
+  }
+}
+
+function clearEvents() {
+  $('evtList').innerHTML = '';
+  $('evtCount').textContent = '0 events';
+  $('vEvt').textContent = '0';
+  fetch('/api/events/clear', {method: 'POST'});
+  toastMsg('日志已清空', 'Log cleared');
+}
+
+// Quality slider
+$('qualitySlider').addEventListener('input', function() {
+  $('qualityVal').textContent = this.value;
+  if (wsConnected && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({type: 'quality', quality: parseInt(this.value)}));
+  }
+});
+
+// Initialize
+connectWebSocket();
+setInterval(pollStats, 1000);
+setInterval(pollEvents, 2000);
+setInterval(loadConfig, 5000);
+loadConfig();
+pollStats();
+pollEvents();
+</script>
+</body>
+</html>

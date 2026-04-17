@@ -1,0 +1,40 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Model files (large binaries)
+models/*.engine
+models/*.engine.bak
+models/*.onnx
+
+# Output events (privacy)
+output/events/*.jpg
+output/events/*.png
+output/events/*.jpeg
+output/events.jsonl
+
+# Backup files
+*.bak
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
