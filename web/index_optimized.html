@@ -79,7 +79,7 @@ body {
 .metrics {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 10px;
 }
 .metric {
@@ -328,10 +328,6 @@ body {
 <div class="shell">
   <!-- Metrics -->
   <div class="metrics">
-    <div class="metric m-fps">
-      <div class="m-label" data-zh="帧率" data-en="FPS">帧率 / FPS</div>
-      <div class="m-val" id="vFps">--</div>
-    </div>
     <div class="metric m-det">
       <div class="m-label" data-zh="检测人数" data-en="Detections">检测人数 / Detections</div>
       <div class="m-val" id="vDet">--</div>
@@ -638,7 +634,6 @@ async function pollStats() {
     const r = await fetch('/api/stats');
     const d = await r.json();
     
-    $('vFps').textContent = (d.fps !== undefined && d.fps > 0) ? d.fps.toFixed(1) : '0.0';
     $('vDet').textContent = (d.detections !== undefined) ? d.detections : '0';
     $('vTrk').textContent = (d.tracks !== undefined) ? d.tracks : '0';
     $('vEvt').textContent = (d.total_events !== undefined) ? d.total_events : '0';
@@ -651,12 +646,11 @@ async function pollStats() {
 
     if (wsConnected) {
       $('connDot').classList.remove('off');
-      $('connText').textContent = `${(d.fps || 0).toFixed(0)} FPS`;
+      $('connText').textContent = 'Connected';
     }
   } catch(e) {
     console.error('Poll stats error:', e);
     $('connDot').classList.add('off');
-    $('vFps').textContent = '0.0';
     $('vDet').textContent = '0';
     $('vTrk').textContent = '0';
   }

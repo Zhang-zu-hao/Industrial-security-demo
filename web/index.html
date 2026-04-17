@@ -79,7 +79,7 @@ body {
 .metrics {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 10px;
 }
 .metric {
@@ -392,10 +392,6 @@ body {
 
 <div class="shell">
   <div class="metrics">
-    <div class="metric m-fps">
-      <div class="m-label" data-zh="帧率" data-en="FPS">帧率</div>
-      <div class="m-val" id="vFps">--</div>
-    </div>
     <div class="metric m-det">
       <div class="m-label" data-zh="检测人数" data-en="DETECTIONS">检测人数</div>
       <div class="m-val" id="vDet">--</div>
@@ -445,10 +441,6 @@ body {
     <div class="events-wrap" style="flex:0; min-height:auto;">
       <div class="panel-head">
         <span data-zh="事件截图" data-en="Snapshots">事件截图</span>
-        <div style="display:flex; align-items:center; gap:6px;">
-          <input type="date" id="snapshotDate" class="date-picker" onchange="loadSnapshotsByDate()">
-          <button class="btn-sm btn-ghost" onclick="resetSnapshotDate()" title="清除日期筛选">✕</button>
-        </div>
         <span class="sub" id="snapCount">0</span>
       </div>
       <div class="snap-gallery" id="snapGallery">
@@ -818,7 +810,6 @@ async function pollStats() {
   try {
     const r = await fetch('/api/stats');
     const d = await r.json();
-    $('vFps').textContent = d.fps > 0 ? d.fps.toFixed(1) : '0.0';
     $('vDet').textContent = d.detections ?? 0;
     $('vTrk').textContent = d.tracks ?? 0;
     $('vEvt').textContent = d.total_events ?? 0;
@@ -877,7 +868,8 @@ async function pollEvents() {
 
 async function pollSnapshots() {
   try {
-    const dateInput = $('snapshotDate');
+    // 使用事件日志的日期筛选
+    const dateInput = $('eventDate');
     const dateFilter = dateInput.value ? dateInput.value.replace(/-/g, '') : null;
     const url = dateFilter ? `/api/events/images?date=${dateFilter}` : '/api/events/images';
     const r = await fetch(url);
@@ -897,21 +889,14 @@ async function pollSnapshots() {
 // 按日期加载事件和截图
 function loadEventsByDate() {
   pollEvents();
-}
-
-function loadSnapshotsByDate() {
-  pollSnapshots();
+  pollSnapshots(); // 事件日志切换时同步更新截图
 }
 
 // 重置日期筛选
 function resetEventDate() {
   $('eventDate').value = '';
   pollEvents();
-}
-
-function resetSnapshotDate() {
-  $('snapshotDate').value = '';
-  pollSnapshots();
+  pollSnapshots(); // 重置时同步更新截图
 }
 
 function viewSnap(url) {
