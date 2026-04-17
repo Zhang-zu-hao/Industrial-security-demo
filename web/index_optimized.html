@@ -667,6 +667,8 @@ async function pollEvents() {
     const evts = await r.json();
     $('evtList').innerHTML = evts.slice().reverse().map(renderEvt).join('');
     $('evtCount').textContent = `${evts.length} events`;
+    // 事件加载完成后同步更新截图
+    pollSnapshots();
   } catch(e) {}
 }
 

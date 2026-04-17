@@ -871,6 +871,8 @@ async function pollEvents() {
       </div>`;
     }).join('');
     $('evtCount').textContent = evts.length;
+    // 事件加载完成后同步更新截图
+    pollSnapshots();
   } catch(e) {}
 }
 
