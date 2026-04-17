@@ -1,0 +1,11 @@
+# Industrial Security Demo - Python Dependencies
+# For NVIDIA Jetson (JetPack 6.2, L4T R36.4.3)
+
+# Core dependencies
+numpy>=1.23.0,<2.0.0
+opencv-python>=4.8.0
+
+# Web server (optional but recommended for optimized mode)
+websockets>=12.0
+
+# Note: tensorrt, cuda, cudnn are provided by JetPack base image (L4T R36.4.3)

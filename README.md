@@ -19,6 +19,7 @@
 - [命令行参数](#命令行参数)
 - [故障排查](#故障排查)
 - [开发与扩展](#开发与扩展)
+- [Docker on Jetson](#docker-on-jetson)
 
 ***
 
@@ -376,6 +377,104 @@ http://<Jetson的IP>:8080
 - **新检测后端**：在 `create_detector()` 中扩展分支，或替换 ONNX/TRT 流程。
 - **规则**：在 `BehaviorDemo._apply_rules` 中扩展事件类型（注意与 `features` 配合）。
 - **前端**：静态资源在 `web/`，修改后刷新浏览器即可（强缓存时可硬刷新）。
+
+***
+
+## Docker on Jetson
+
+### 镜像特点
+
+- ✅ **无需登录**：使用 Ubuntu 官方镜像，无需 NGC 登录
+- ✅ **体积极小**：压缩后仅 **333 MB**（原方案约 5GB）
+- ✅ **适配性强**：不绑定特定 L4T 版本，跨 JetPack 版本兼容
+- ✅ **开箱即用**：已配置 TensorRT Python 包，无需手动映射
+
+### 快速开始
+
+#### 1. 构建镜像
+
+```bash
+cd industrial-security-demo
+docker build --network=host -t industrial-security-demo:latest .
+```
+
+> **提示**：使用 `--network=host` 可避免部分网络环境问题
+
+#### 2. 运行容器
+
+```bash
+docker compose up -d
+```
+
+或手动运行：
+
+```bash
+docker run -d \
+  --runtime=nvidia \
+  --network=host \
+  --privileged \
+  -v "$(pwd)/config:/app/config:ro" \
+  -v "$(pwd)/models:/app/models:ro" \
+  -v "$(pwd)/output:/app/output" \
+  -v /usr/lib/aarch64-linux-gnu:/usr/lib/aarch64-linux-gnu:ro \
+  -v /usr/local/cuda:/usr/local/cuda:ro \
+  -v /usr/lib/python3.10/dist-packages/tensorrt:/usr/lib/python3/dist-packages/tensorrt:ro \
+  industrial-security-demo:latest
+```
+
+#### 3. 查看状态
+
+```bash
+# 查看日志
+docker logs -f industrial-security-demo
+
+# 查看运行状态
+docker ps
+```
+
+#### 4. 访问 Web 界面
+
+浏览器打开：`http://<Jetson-IP>:8080`
+
+### 离线部署（导出/导入镜像）
+
+#### 导出镜像
+
+```bash
+bash scripts/docker-export.sh industrial-security-demo:latest ./industrial-security-demo.tar.gz
+```
+
+导出文件：`industrial-security-demo.tar.gz`（约 333 MB）
+
+#### 导入镜像（目标设备）
+
+```bash
+gunzip -c industrial-security-demo.tar.gz | docker load
+```
+
+### 核心优势对比
+
+| 项目 | 优化前 | 优化后 |
+|------|--------|--------|
+| **基础镜像** | nvcr.io/nvidia/l4t-jetpack | ubuntu:22.04 |
+| **镜像大小** | ~5 GB | **333 MB** |
+| **NGC 登录** | 需要 | **不需要** |
+| **TensorRT** | 镜像内置 | 映射主机库 |
+| **跨版本兼容** | 绑定 L4T 版本 | ✅ 支持多版本 |
+
+### 常见问题
+
+**Q: 为什么使用 `--network=host` 构建？**  
+A: 避免 Docker Hub 网络超时问题，同时解决部分 iptables 兼容性问题。
+
+**Q: TensorRT 版本不匹配怎么办？**  
+A: 镜像已映射主机 TensorRT Python 包，确保主机 JetPack 版本与容器兼容即可。
+
+**Q: 可以在 x86 服务器上构建吗？**  
+A: 不可以，必须在 ARM64 架构的 Jetson 设备上构建。
+
+**Q: 如何更新应用代码？**  
+A: 重新构建镜像：`docker build --network=host -t industrial-security-demo:latest .`
 
 ***
 

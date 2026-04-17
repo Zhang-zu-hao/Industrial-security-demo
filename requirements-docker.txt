@@ -1,0 +1,2 @@
+# Docker（L4T l4t-jetpack）内：OpenCV/NumPy 用 apt 安装，此处只装 pip 独有依赖
+websockets>=12.0

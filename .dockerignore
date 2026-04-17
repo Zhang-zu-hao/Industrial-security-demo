@@ -1,0 +1,43 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+
+# Virtual environments
+venv/
+env/
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Output files
+output/
+*.jsonl
+events/
+
+# Build artifacts（注意：不要忽略 models/*.engine，否则容器内 TensorRT 无法加载引擎）
+build/
+dist/
+
+# Documentation (optional, include if needed for debugging)
+# README.md
+
+# Scripts (not needed in container)
+run_demo.sh
+build_yolov8_engine.py
+
+# Test files
+tests/
+*.test.py
