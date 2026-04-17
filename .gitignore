@@ -18,12 +18,12 @@ ENV/
 *.swo
 *~
 
-# Model files (large binaries)
+# Model files (large binaries) - exclude from repo
+# Keep only old model files, new ones will be added manually
 models/*.engine
 models/*.engine.bak
-models/*.onnx
 
-# Output events (privacy)
+# Output events (privacy) - exclude from repo
 output/events/*.jpg
 output/events/*.png
 output/events/*.jpeg
