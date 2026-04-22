@@ -130,6 +130,14 @@ body {
   justify-content: center;
 }
 #stream { max-width: 100%; max-height: 100%; object-fit: contain; }
+#zoneCanvas {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  cursor: crosshair;
+  display: none;
+  z-index: 5;
+}
 .video-status {
   position: absolute;
   top: 10px;
@@ -139,6 +147,41 @@ body {
   border-radius: 4px;
   font-size: 11px;
   font-family: var(--mono);
+  z-index: 6;
+}
+.zone-toolbar {
+  position: absolute;
+  bottom: 10px; left: 50%;
+  transform: translateX(-50%);
+  display: none;
+  gap: 6px;
+  z-index: 6;
+  background: rgba(0,0,0,0.8);
+  padding: 6px 12px;
+  border-radius: 6px;
+}
+.zone-toolbar button {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+}
+.zone-toolbar button.active { background: var(--accent); color: #000; border-color: var(--accent); }
+.zone-toolbar button:hover { filter: brightness(1.2); }
+.zone-hint {
+  position: absolute;
+  top: 40px; left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.8);
+  color: var(--accent);
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 11px;
+  z-index: 7;
+  display: none;
 }
 
 /* Right column */
@@ -309,7 +352,7 @@ body {
     <img src="seeedIcon.png" alt="Seeed" class="logo-img">
     <div class="title-group">
       <div class="topbar-title" data-zh="安防行为检测" data-en="Security Behavior Detection">安防行为检测</div>
-      <div class="topbar-subtitle">reComputer J3011 - Optimized</div>
+      <div class="topbar-subtitle">Seeed reComputer Industrial</div>
     </div>
   </div>
   <div class="topbar-right">
@@ -358,6 +401,13 @@ body {
     </div>
     <div class="video-container">
       <img id="stream" src="" alt="live">
+      <canvas id="zoneCanvas"></canvas>
+      <div class="zone-hint" id="zoneHint" data-zh="点击画点，双击/右键闭合区域" data-en="Click to add points, dblclick/right-click to close">点击画点，双击/右键闭合区域</div>
+      <div class="zone-toolbar" id="zoneToolbar">
+        <button onclick="startDrawZone()" id="btnDrawZone" data-zh="绘制区域" data-en="Draw Zone">绘制区域</button>
+        <button onclick="clearDrawnZone()" data-zh="清除区域" data-en="Clear Zone">清除区域</button>
+        <button onclick="cancelDraw()" data-zh="取消" data-en="Cancel">取消</button>
+      </div>
       <div class="video-status" id="videoStatus">WebSocket: 未连接</div>
     </div>
   </div>
@@ -424,6 +474,10 @@ body {
           <span class="ctrl-lbl" data-zh="置信度阈值" data-en="Confidence">置信度阈值</span>
           <input class="ctrl-inp" type="number" id="inConf" min="0.1" max="0.9" step="0.05" value="0.25">
         </div>
+        <div class="ctrl-field full">
+          <span class="ctrl-lbl" data-zh="检测区域" data-en="Detection Zone">检测区域</span>
+          <button class="btn btn-ghost" onclick="toggleZoneEditor()" id="btnZoneEdit" style="font-size:11px" data-zh="在视频上绘制区域" data-en="Draw Zone on Video">在视频上绘制区域</button>
+        </div>
       </div>
       <div class="btn-row">
         <button class="btn btn-primary" onclick="applyConfig()" data-zh="应用配置" data-en="Apply Config">应用配置</button>
@@ -438,7 +492,6 @@ body {
 <script>
 const $ = id => document.getElementById(id);
 
-// Language management
 let currentLang = 'zh';
 function switchLang(lang) {
   currentLang = lang;
@@ -453,111 +506,56 @@ function switchLang(lang) {
   updateClock();
 }
 
-const eventLabels = {
-  zone_enter: '区域进入',
-  loitering: '徘徊告警',
-  line_cross: '越线告警'
-};
+const eventLabels = { zone_enter: '区域进入', loitering: '徘徊告警', line_cross: '越线告警' };
 
 function updateEventLabels() {
-  const labels = currentLang === 'zh' ? {
-    zone_enter: '区域进入',
-    loitering: '徘徊告警',
-    line_cross: '越线告警'
-  } : {
-    zone_enter: 'Zone Entry',
-    loitering: 'Loitering Alert',
-    line_cross: 'Line Cross Alert'
-  };
+  const labels = currentLang === 'zh'
+    ? { zone_enter: '区域进入', loitering: '徘徊告警', line_cross: '越线告警' }
+    : { zone_enter: 'Zone Entry', loitering: 'Loitering Alert', line_cross: 'Line Cross Alert' };
   Object.assign(eventLabels, labels);
-  pollEvents();
 }
 
 function pad(n) { return n < 10 ? '0' + n : n; }
-
 function formatEvtDisplay(ts) {
   if (!ts || ts.length < 15) return { sub: ts || '--', short: '' };
-  const datePart = ts.slice(0, 8);
-  const timePart = ts.slice(9);
-  if (datePart.length === 8 && timePart.length === 6) {
-    const sub = `${datePart.slice(0, 4)}-${datePart.slice(4, 6)}-${datePart.slice(6, 8)} ${timePart.slice(0, 2)}:${timePart.slice(2, 4)}:${timePart.slice(4, 6)}`;
-    const short = `${timePart.slice(0, 2)}:${timePart.slice(2, 4)}:${timePart.slice(4, 6)}`;
-    return { sub, short };
+  const d = ts.slice(0, 8), t = ts.slice(9);
+  if (d.length === 8 && t.length === 6) {
+    return {
+      sub: `${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)} ${t.slice(0,2)}:${t.slice(2,4)}:${t.slice(4,6)}`,
+      short: `${t.slice(0,2)}:${t.slice(2,4)}:${t.slice(4,6)}`
+    };
   }
   return { sub: ts, short: ts.slice(-8) };
 }
 
-let serverClockUnix = null;
-let serverClockPerfAt = null;
-let serverTzIana = 'UTC';
-
 function fmtUp(s) {
-  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
-  const sec = Math.floor(s % 60);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = Math.floor(s % 60);
   return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`;
 }
-function toast(msg) {
-  const el = $('toast');
-  el.textContent = msg;
-  el.classList.add('show');
-  setTimeout(() => el.classList.remove('show'), 2200);
-}
-function toastMsg(zh, en) {
-  toast(currentLang === 'zh' ? zh : en);
-}
+function toast(msg) { const el = $('toast'); el.textContent = msg; el.classList.add('show'); setTimeout(() => el.classList.remove('show'), 2200); }
+function toastMsg(zh, en) { toast(currentLang === 'zh' ? zh : en); }
 
 function updateClock() {
-  const el = $('clock');
-  // 使用系统当前时间，确保与摄像头时间同步
   const now = new Date();
   const locale = currentLang === 'zh' ? 'zh-CN' : 'en-US';
-  
-  // 格式化时间为：星期 月/日 时：分：秒
-  const options = {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false
-  };
-  
-  const formatter = new Intl.DateTimeFormat(locale, options);
-  const parts = formatter.formatToParts(now);
-  const month = parts.find(p => p.type === 'month').value;
-  const day = parts.find(p => p.type === 'day').value;
-  const hour = parts.find(p => p.type === 'hour').value;
-  const minute = parts.find(p => p.type === 'minute').value;
-  const second = parts.find(p => p.type === 'second').value;
-  
-  // 获取星期
-  const weekday = now.toLocaleDateString(locale, { weekday: 'short' });
-  
-  el.textContent = `${weekday} ${month}/${day} ${hour}:${minute}:${second}`;
-  el.title = '系统时间';
+  const fmt = new Intl.DateTimeFormat(locale, { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false });
+  const p = fmt.formatToParts(now);
+  const g = t => (p.find(x => x.type === t) || {}).value || '';
+  const wd = now.toLocaleDateString(locale, { weekday: 'short' });
+  $('clock').textContent = `${wd} ${g('month')}/${g('day')} ${g('hour')}:${g('minute')}:${g('second')}`;
 }
 setInterval(updateClock, 1000);
 updateClock();
 
-// Initialize language
 const savedLang = localStorage.getItem('lang') || 'zh';
 switchLang(savedLang);
 
 // Feature toggles
-let featureFlags = {
-  human_detect: true,
-  tracking: true,
-  zone_detection: true,
-  line_crossing: true,
-  loitering: false
-};
+let featureFlags = { human_detect: true, tracking: true, zone_detection: true, line_crossing: true, loitering: false };
 
 function toggleFeature(feature) {
-  const checkbox = $(`feat_${feature.replace('_', '')}`);
-  if (checkbox) {
-    checkbox.checked = !checkbox.checked;
-    updateFeatures();
-  }
+  const cb = $(`feat_${feature.replace('_', '')}`);
+  if (cb) { cb.checked = !cb.checked; updateFeatures(); }
 }
 
 function updateFeatures() {
@@ -568,15 +566,159 @@ function updateFeatures() {
     line_crossing: $('feat_line')?.checked || false,
     loitering: $('feat_loiter')?.checked || false
   };
-  
-  // Update UI
   document.querySelectorAll('.feature-item').forEach(item => {
-    const checkbox = item.querySelector('input[type=checkbox]');
-    item.classList.toggle('active', checkbox?.checked);
+    const cb = item.querySelector('input[type=checkbox]');
+    item.classList.toggle('active', cb?.checked);
   });
 }
 
-// WebSocket connection
+// ===================== Zone Drawing =====================
+let drawnZonePoints = [];
+let isDrawing = false;
+let zoneEditorActive = false;
+
+function toggleZoneEditor() {
+  zoneEditorActive = !zoneEditorActive;
+  const canvas = $('zoneCanvas');
+  const toolbar = $('zoneToolbar');
+  canvas.style.display = zoneEditorActive ? 'block' : 'none';
+  toolbar.style.display = zoneEditorActive ? 'flex' : 'none';
+  $('btnZoneEdit').style.borderColor = zoneEditorActive ? 'var(--accent)' : '';
+  if (zoneEditorActive) {
+    resizeCanvas();
+    redrawZone();
+  }
+}
+
+function resizeCanvas() {
+  const container = $('zoneCanvas').parentElement;
+  const img = $('stream');
+  const canvas = $('zoneCanvas');
+  canvas.width = container.clientWidth;
+  canvas.height = container.clientHeight;
+}
+
+function getCanvasCoords(e) {
+  const canvas = $('zoneCanvas');
+  const rect = canvas.getBoundingClientRect();
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+}
+
+function toNormalized(px, py) {
+  const canvas = $('zoneCanvas');
+  return [+(px / canvas.width).toFixed(4), +(py / canvas.height).toFixed(4)];
+}
+
+function fromNormalized(nx, ny) {
+  const canvas = $('zoneCanvas');
+  return [nx * canvas.width, ny * canvas.height];
+}
+
+function startDrawZone() {
+  isDrawing = true;
+  drawnZonePoints = [];
+  $('zoneHint').style.display = 'block';
+  $('btnDrawZone').classList.add('active');
+  redrawZone();
+}
+
+function clearDrawnZone() {
+  drawnZonePoints = [];
+  isDrawing = false;
+  $('zoneHint').style.display = 'none';
+  $('btnDrawZone').classList.remove('active');
+  redrawZone();
+  toastMsg('区域已清除', 'Zone cleared');
+}
+
+function cancelDraw() {
+  isDrawing = false;
+  $('zoneHint').style.display = 'none';
+  $('btnDrawZone').classList.remove('active');
+  toggleZoneEditor();
+}
+
+function redrawZone() {
+  const canvas = $('zoneCanvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (drawnZonePoints.length === 0) return;
+
+  const pts = drawnZonePoints.map(p => fromNormalized(p[0], p[1]));
+
+  // Fill
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  if (!isDrawing) ctx.closePath();
+  ctx.fillStyle = 'rgba(34, 211, 167, 0.15)';
+  ctx.fill();
+
+  // Stroke
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  if (!isDrawing) ctx.closePath();
+  ctx.strokeStyle = '#22d3a7';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Points
+  pts.forEach((p, i) => {
+    ctx.beginPath();
+    ctx.arc(p[0], p[1], 5, 0, Math.PI * 2);
+    ctx.fillStyle = i === 0 && isDrawing ? '#f59e0b' : '#22d3a7';
+    ctx.fill();
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  });
+}
+
+$('zoneCanvas').addEventListener('click', function(e) {
+  if (!isDrawing) return;
+  const { x, y } = getCanvasCoords(e);
+  const norm = toNormalized(x, y);
+
+  if (drawnZonePoints.length >= 3) {
+    const first = fromNormalized(drawnZonePoints[0][0], drawnZonePoints[0][1]);
+    if (Math.hypot(x - first[0], y - first[1]) < 15) {
+      isDrawing = false;
+      $('zoneHint').style.display = 'none';
+      $('btnDrawZone').classList.remove('active');
+      redrawZone();
+      toastMsg('区域已完成！点击"应用配置"生效', 'Zone set! Click Apply to save');
+      return;
+    }
+  }
+  drawnZonePoints.push(norm);
+  redrawZone();
+});
+
+$('zoneCanvas').addEventListener('dblclick', function(e) {
+  if (!isDrawing || drawnZonePoints.length < 3) return;
+  e.preventDefault();
+  isDrawing = false;
+  $('zoneHint').style.display = 'none';
+  $('btnDrawZone').classList.remove('active');
+  redrawZone();
+  toastMsg('区域已完成！点击"应用配置"生效', 'Zone set! Click Apply to save');
+});
+
+$('zoneCanvas').addEventListener('contextmenu', function(e) {
+  e.preventDefault();
+  if (!isDrawing || drawnZonePoints.length < 3) return;
+  isDrawing = false;
+  $('zoneHint').style.display = 'none';
+  $('btnDrawZone').classList.remove('active');
+  redrawZone();
+  toastMsg('区域已完成！点击"应用配置"生效', 'Zone set! Click Apply to save');
+});
+
+window.addEventListener('resize', () => { if (zoneEditorActive) { resizeCanvas(); redrawZone(); } });
+
+// ===================== WebSocket Video =====================
 let ws = null;
 let wsConnected = false;
 const wsUrl = `ws://${window.location.hostname}:8081`;
@@ -584,124 +726,145 @@ const wsUrl = `ws://${window.location.hostname}:8081`;
 function connectWebSocket() {
   try {
     ws = new WebSocket(wsUrl);
-    
-    ws.onopen = function() {
+    ws.binaryType = 'arraybuffer';
+    ws.onopen = () => {
       wsConnected = true;
-      $('videoStatus').textContent = `WebSocket: 已连接 (${window.location.hostname}:8081)`;
+      $('videoStatus').textContent = `WebSocket: ${currentLang === 'zh' ? '已连接' : 'Connected'}`;
       $('connDot').classList.remove('off');
       $('connText').textContent = 'WebSocket';
       $('vStream').textContent = 'WS';
-      console.log('WebSocket connected');
     };
-    
-    ws.onclose = function() {
+    ws.onclose = () => {
       wsConnected = false;
-      $('videoStatus').textContent = 'WebSocket: 已断开 - 切换到 HTTP';
+      $('videoStatus').textContent = currentLang === 'zh' ? 'WebSocket: 已断开 - HTTP回退' : 'WebSocket: Disconnected - HTTP Fallback';
       $('connDot').classList.add('off');
-      $('connText').textContent = 'HTTP Fallback';
+      $('connText').textContent = 'HTTP';
       $('vStream').textContent = 'HTTP';
-      console.log('WebSocket disconnected, falling back to HTTP');
-      
-      // Fallback to HTTP MJPEG
       $('stream').src = '/api/stream';
-      
-      // Reconnect after 3 seconds
       setTimeout(connectWebSocket, 3000);
     };
-    
-    ws.onerror = function(error) {
-      console.error('WebSocket error:', error);
-    };
-    
-    ws.onmessage = function(event) {
-      // Receive JPEG frame as blob
-      if (event.data instanceof Blob) {
-        const url = URL.createObjectURL(event.data);
-        $('stream').src = url;
-        // Clean up old URL
-        setTimeout(() => URL.revokeObjectURL(url), 100);
+    ws.onerror = () => {};
+    ws.onmessage = (event) => {
+      if (event.data instanceof Blob || event.data instanceof ArrayBuffer) {
+        const blob = event.data instanceof Blob ? event.data : new Blob([event.data], {type: 'image/jpeg'});
+        const url = URL.createObjectURL(blob);
+        const img = $('stream');
+        const old = img.src;
+        img.src = url;
+        if (old.startsWith('blob:')) setTimeout(() => URL.revokeObjectURL(old), 50);
       }
     };
   } catch (e) {
-    console.error('WebSocket connection failed:', e);
-    // Fallback to HTTP
     $('stream').src = '/api/stream';
   }
 }
 
-// Stats polling
+// ===================== Config WebSocket =====================
+let cfgWs = null;
+const cfgWsUrl = `ws://${window.location.hostname}:8082`;
+
+function connectConfigWS() {
+  try {
+    cfgWs = new WebSocket(cfgWsUrl);
+    cfgWs.onclose = () => { setTimeout(connectConfigWS, 5000); };
+    cfgWs.onerror = () => {};
+  } catch(e) {}
+}
+
+async function sendConfig(body) {
+  try {
+    if (cfgWs && cfgWs.readyState === WebSocket.OPEN) {
+      cfgWs.send(JSON.stringify(body));
+    } else {
+      await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+    }
+    return true;
+  } catch(e) { return false; }
+}
+
+// ===================== Polling =====================
 async function pollStats() {
   try {
     const r = await fetch('/api/stats');
     const d = await r.json();
-    
-    $('vDet').textContent = (d.detections !== undefined) ? d.detections : '0';
-    $('vTrk').textContent = (d.tracks !== undefined) ? d.tracks : '0';
-    $('vEvt').textContent = (d.total_events !== undefined) ? d.total_events : '0';
+    $('vDet').textContent = d.detections ?? '0';
+    $('vTrk').textContent = d.tracks ?? '0';
+    $('vEvt').textContent = d.total_events ?? '0';
     $('vUp').textContent = fmtUp(d.uptime_seconds || 0);
-    if (d.server_time_unix != null && d.server_tz_iana) {
-      serverClockUnix = d.server_time_unix;
-      serverClockPerfAt = performance.now();
-      serverTzIana = d.server_tz_iana;
-    }
-
-    if (wsConnected) {
-      $('connDot').classList.remove('off');
-      $('connText').textContent = 'Connected';
-    }
+    if (wsConnected) { $('connDot').classList.remove('off'); $('connText').textContent = 'Connected'; }
   } catch(e) {
-    console.error('Poll stats error:', e);
     $('connDot').classList.add('off');
-    $('vDet').textContent = '0';
-    $('vTrk').textContent = '0';
   }
 }
 
-// Events polling
+let lastEventDate = null;
 async function pollEvents() {
   try {
     const dateInput = $('eventDate');
-    const dateFilter = dateInput.value ? dateInput.value.replace(/-/g, '') : null;
+    const dateFilter = dateInput.value ? dateInput.value.replace(/-/g, '') : '';
     const url = dateFilter ? `/api/events?date=${dateFilter}` : '/api/events';
     const r = await fetch(url);
     const evts = await r.json();
-    $('evtList').innerHTML = evts.slice().reverse().map(renderEvt).join('');
+
+    const imgUrl = dateFilter ? `/api/events/images?date=${dateFilter}` : '/api/events/images';
+    const imgR = await fetch(imgUrl);
+    const images = await imgR.json();
+    const imgMap = {};
+    images.forEach(img => { imgMap[img.name.split('.')[0]] = img.url; });
+
+    $('evtList').innerHTML = evts.slice().reverse().map(ev => renderEvt(ev, imgMap)).join('');
     $('evtCount').textContent = `${evts.length} events`;
-    // 事件加载完成后同步更新截图
-    pollSnapshots();
   } catch(e) {}
 }
 
-function renderEvt(ev) {
+function renderEvt(ev, imgMap) {
   const t = ev.event_type || 'unknown';
   const label = eventLabels[t] || t;
   const loc = ev.zone_name || ev.line_name || '';
   const extra = ev.dwell_seconds ? `${ev.dwell_seconds}s` : '';
   const detail = [loc, extra].filter(Boolean).join(' · ');
   const tsFmt = formatEvtDisplay(ev.timestamp);
+
+  const imgKey = `${ev.timestamp}_${ev.event_type}_track${ev.track_id}`;
+  const thumbHtml = imgMap && imgMap[imgKey]
+    ? `<img src="${imgMap[imgKey]}" style="width:40px;height:30px;object-fit:cover;border-radius:3px;cursor:pointer;margin-left:4px" onclick="window.open('${imgMap[imgKey]}','_blank')" loading="lazy">`
+    : '';
+
   return `<div class="evt">
     <div class="evt-tag tag-${t}">${label}</div>
     <div class="evt-body">
       <div class="evt-main">Track #${ev.track_id}${detail ? ' · ' + detail : ''}</div>
       <div class="evt-sub">${tsFmt.sub}</div>
     </div>
-    <div class="evt-time">${tsFmt.short}</div>
+    <div style="display:flex;align-items:center;gap:4px">
+      ${thumbHtml}
+      <div class="evt-time">${tsFmt.short}</div>
+    </div>
   </div>`;
 }
 
-// Config management
+// ===================== Config Management =====================
+let serverZones = [];
+
 async function loadConfig() {
   try {
     const r = await fetch('/api/config');
     const c = await r.json();
-    const camName = c.camera?.name || 'Camera';
-    $('camName').textContent = camName;
+    $('camName').textContent = c.camera?.name || 'Camera';
     const rules = c.rules || {};
     $('inCooldown').value = rules.event_cooldown_seconds || 8;
-    if (rules.zones?.length) $('inDwell').value = rules.zones[0].dwell_seconds || 10;
+    if (rules.zones?.length) {
+      $('inDwell').value = rules.zones[0].dwell_seconds || 10;
+      serverZones = rules.zones;
+      if (drawnZonePoints.length === 0 && rules.zones[0]?.points) {
+        drawnZonePoints = rules.zones[0].points.map(p => [p[0], p[1]]);
+      }
+    }
     if (c.detector?.conf_threshold) $('inConf').value = c.detector.conf_threshold;
-    
-    // Load feature flags
     if (c.features) {
       featureFlags = c.features;
       $('feat_human').checked = featureFlags.human_detect || false;
@@ -715,6 +878,7 @@ async function loadConfig() {
 }
 
 async function applyConfig() {
+  const zonePoints = drawnZonePoints.length >= 3 ? drawnZonePoints : [[0.6,0.22],[0.94,0.22],[0.94,0.88],[0.6,0.88]];
   const body = {
     rules: {
       event_cooldown_seconds: parseFloat($('inCooldown').value),
@@ -722,59 +886,40 @@ async function applyConfig() {
         name: 'restricted_area',
         dwell_seconds: parseFloat($('inDwell').value),
         color_bgr: [0, 255, 255],
-        points: [[0.6, 0.22], [0.94, 0.22], [0.94, 0.88], [0.6, 0.88]]
+        points: zonePoints
       }]
     },
-    detector: {
-      conf_threshold: parseFloat($('inConf').value)
-    },
+    detector: { conf_threshold: parseFloat($('inConf').value) },
     features: featureFlags
   };
-  
-  try {
-    // Send via WebSocket if connected
-    if (wsConnected && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(body));
-    } else {
-      await fetch('/api/config', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(body)
-      });
-    }
-    toastMsg('配置已应用', 'Config applied');
-  } catch(e) {
-    toastMsg('应用失败', 'Failed to apply');
-  }
+  const ok = await sendConfig(body);
+  toastMsg(ok ? '配置已应用' : '应用失败', ok ? 'Config applied' : 'Failed to apply');
 }
 
 function clearEvents() {
   $('evtList').innerHTML = '';
   $('evtCount').textContent = '0 events';
   $('vEvt').textContent = '0';
-  fetch('/api/events/clear', {method: 'POST'});
+  fetch('/api/events/clear', { method: 'POST' });
   toastMsg('日志已清空', 'Log cleared');
 }
 
-// 重置日期筛选
 function resetEventDate() {
   $('eventDate').value = '';
   pollEvents();
 }
 
-// Quality slider
 $('qualitySlider').addEventListener('input', function() {
   $('qualityVal').textContent = this.value;
-  if (wsConnected && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({type: 'quality', quality: parseInt(this.value)}));
-  }
+  sendConfig({ quality: parseInt(this.value) });
 });
 
-// Initialize
+// ===================== Init =====================
 connectWebSocket();
+connectConfigWS();
 setInterval(pollStats, 1000);
-setInterval(pollEvents, 2000);
-setInterval(loadConfig, 5000);
+setInterval(pollEvents, 3000);
+setInterval(loadConfig, 8000);
 loadConfig();
 pollStats();
 pollEvents();

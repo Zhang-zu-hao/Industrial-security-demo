@@ -90,12 +90,16 @@ def _head_kind_from_shape(raw_shape: tuple) -> str:
     dims = [int(d) for d in raw_shape if d > 0]
     if len(dims) == 2:
         r0, r1 = dims[0], dims[1]
+        if r1 == 6 and r0 <= 500:
+            return "e2e"
         lo, hi = min(r0, r1), max(r0, r1)
         if 5 <= lo <= 128 and hi >= 1000 and hi > lo * 8:
             return "v8" if r0 == lo else "v8_t"
         return "v5"
     if len(dims) == 3:
         _, d1, d2 = dims[0], dims[1], dims[2]
+        if d2 == 6 and d1 <= 500:
+            return "e2e"
         if d2 == 85:
             return "v5"
         if 5 <= d1 <= 128 and d2 > d1 and d2 >= 100:
@@ -107,7 +111,7 @@ def _head_kind_from_shape(raw_shape: tuple) -> str:
 
 def _is_yolov8_model(onnx_path: str) -> bool:
     p = Path(onnx_path).name.lower()
-    return any(k in p for k in ["yolov8", "yolo8", "yolov11", "yolo11"])
+    return any(k in p for k in ["yolov8", "yolo8", "yolov11", "yolo11", "yolo26"])
 
 
 def _rebuild_engine(onnx_path: str, engine_path: str) -> bool:
@@ -296,7 +300,14 @@ class YOLOTRTDetector:
             raise RuntimeError(str(e))
 
     def _init_dnn(self, onnx_path: str):
-        self._net = cv2.dnn.readNetFromONNX(onnx_path)
+        try:
+            self._net = cv2.dnn.readNetFromONNX(onnx_path)
+        except cv2.error as e:
+            if "TopK" in str(e) or "parse error" in str(e):
+                raise RuntimeError(
+                    f"ONNX model uses operators not supported by OpenCV DNN (e.g. TopK in NMS-free models like YOLO26). "
+                    f"TensorRT is required for this model. Error: {e}")
+            raise
         self._net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
         self._net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
         self._dnn_head_guess: Optional[str] = None
@@ -366,6 +377,8 @@ class YOLOTRTDetector:
         if raw.ndim == 2:
             raw = np.expand_dims(raw, 0)
         kind = self._head_kind
+        if kind == "e2e":
+            return self._postprocess_e2e(raw[0].astype(np.float32), w0, h0)
         if kind == "v8_t":
             preds = raw[0].astype(np.float32)
         elif kind == "v8":
@@ -441,6 +454,31 @@ class YOLOTRTDetector:
         flat = np.array(indices).flatten()
         return [(int(boxes[i][0]), int(boxes[i][1]), int(boxes[i][2]), int(boxes[i][3]))
                 for i in flat]
+
+
+    def _postprocess_e2e(self, preds: np.ndarray, w0: int, h0: int) -> List[BBox]:
+        """NMS-free end-to-end output: (N, 6) = [x1, y1, x2, y2, conf, class_id]."""
+        if len(preds) == 0:
+            return []
+
+        scores = preds[:, 4]
+        mask = scores > self.conf_threshold
+        if self.person_only:
+            mask &= preds[:, 5].astype(int) == 0
+        preds = preds[mask]
+        if len(preds) == 0:
+            return []
+
+        sx, sy = w0 / self.INPUT_SIZE, h0 / self.INPUT_SIZE
+        x1 = (preds[:, 0] * sx).clip(0, w0)
+        y1 = (preds[:, 1] * sy).clip(0, h0)
+        x2 = (preds[:, 2] * sx).clip(0, w0)
+        y2 = (preds[:, 3] * sy).clip(0, h0)
+        w = x2 - x1
+        h = y2 - y1
+
+        return [(int(x1[i]), int(y1[i]), int(w[i]), int(h[i]))
+                for i in range(len(preds)) if w[i] > 2 and h[i] > 2]
 
 
 YOLOv5TRTDetector = YOLOTRTDetector

@@ -1,6 +1,37 @@
 # Industrial Security Demo
 
-面向 **NVIDIA Jetson**（reComputer Industrial 等）的工业安防演示：RTSP 摄像头接入、**TensorRT FP16** 人员检测、质心跟踪、区域入侵 / 越线 / 徘徊规则，以及浏览器监控面板（HTTP + 可选 WebSocket 低延迟流）。
+<p align="center">
+  <b>Edge AI-Powered Industrial Security Monitoring on NVIDIA Jetson</b>
+</p>
+
+面向 **Seeed reComputer Industrial** 系列 Jetson 边缘设备的工业安防演示：RTSP/USB 摄像头接入、**TensorRT FP16** 人员检测、质心跟踪、可交互绘制的区域入侵/越线/徘徊规则，以及浏览器实时监控面板。
+
+***
+
+## Why Edge AI? 项目亮点
+
+| 优势 | 说明 |
+|------|------|
+| **数据安全，隐私合规** | 全链路本地推理，视频流与事件数据不出厂区/园区，满足工业安全与隐私合规要求。无需将敏感视频上传云端 |
+| **TensorRT FP16 加速** | 利用 Jetson GPU + TensorRT 进行 FP16 量化推理，YOLO26n 延迟仅 ~3.7ms（268 QPS），实时性远超云端方案 |
+| **NMS-Free 端到端推理** | 支持最新 Ultralytics YOLO26，原生无需 NMS 后处理，进一步降低延迟，专为边缘场景优化 |
+| **GStreamer 硬件解码** | Jetson NVDEC 硬解 RTSP 视频流，CPU 几乎零开销 |
+| **离线部署，低带宽** | 不依赖互联网，适合矿山、工厂、仓库、工地等无网/弱网环境 |
+| **灵活二次开发** | 支持自训练模型 (YOLOv5/v8/v11/v26)、自定义规则、REST API 对接，开箱即用也能深度定制 |
+| **交互式区域配置** | 浏览器中直接在视频画面上绘制检测区域，无需修改配置文件 |
+
+***
+
+## 当前测试设备
+
+| 项目 | 详情 |
+|------|------|
+| **设备** | [Seeed reComputer Industrial J401](https://www.seeedstudio.com/reComputer-Industrial-J4012-p-5684.html) |
+| **SoM** | NVIDIA Jetson Orin NX 16GB (p3767-0000-super) |
+| **JetPack** | 6.2 (L4T R36.4.3, Ubuntu 22.04) |
+| **GPU** | Ampere, 1024 CUDA cores, TensorRT 10.3.0 |
+
+> **兼容性**：本项目适配 Seeed reComputer Industrial 全系列 Jetson 设备（Orin NX / Orin Nano 等），以及其他运行 JetPack 6.x 的 Jetson 平台。
 
 ***
 
@@ -9,55 +40,50 @@
 - [功能概览](#功能概览)
 - [系统架构](#系统架构)
 - [运行环境与依赖](#运行环境与依赖)
-- [仓库结构](#仓库结构)
 - [快速开始](#快速开始)
 - [部署教程](#部署教程)
 - [配置说明](#配置说明)
-- [Web 与优化模式](#web-与优化模式)
 - [模型与 TensorRT 引擎](#模型与-tensorrt-引擎)
+- [自训练模型与二次开发](#自训练模型与二次开发)
 - [API 与事件输出](#api-与事件输出)
+- [Web 与优化模式](#web-与优化模式)
 - [命令行参数](#命令行参数)
 - [故障排查](#故障排查)
-- [开发与扩展](#开发与扩展)
 - [Docker on Jetson](#docker-on-jetson)
 
 ***
 
 ## 功能概览
 
-| 能力              | 说明                                                                                                            |
-| --------------- | ------------------------------------------------------------------------------------------------------------- |
-| RTSP / USB 视频源  | 支持 `rtsp://...` 与本地摄像头索引（如 `0`）                                                                               |
-| Jetson NVDEC 硬解 | GStreamer 管线解码，降低 CPU 占用（可关闭回退软解）                                                                             |
-| 人员检测            | 默认 **YOLOv5n ONNX → TensorRT FP16**；检测器支持 YOLOv5 / YOLOv8 等 Ultralytics 导出 ONNX（见 `app/yolo_trt_detector.py`） |
-| 跟踪              | 质心跟踪（`CentroidTracker`），可配置距离与超时                                                                              |
-| 行为规则            | 区域入侵、越线、徘徊（依赖跟踪与功能开关）                                                                                         |
-| 本地窗口            | OpenCV 窗口预览（需 `DISPLAY`）                                                                                      |
-| Web 面板          | 静态页面 + MJPEG；若安装 `websockets` 则启用 **优化服务**（双 WebSocket + 动态 JPEG 质量等）                                         |
-| 事件              | `events.jsonl` + `output/events/` 截图                                                                          |
+| 能力 | 说明 |
+|------|------|
+| RTSP / USB 视频源 | 支持 `rtsp://...` 与本地摄像头索引（如 `0`） |
+| Jetson NVDEC 硬解 | GStreamer 管线解码，降低 CPU 占用（可关闭回退软解） |
+| 人员检测 | 默认 **YOLO26n → TensorRT FP16**（NMS-free 端到端推理）；兼容 YOLOv5/v8/v11 ONNX |
+| 目标跟踪 | 质心跟踪（`CentroidTracker`），可配置距离与超时 |
+| 行为规则 | 区域入侵、越线、徘徊（支持浏览器交互绘制检测区域） |
+| Web 面板 | 静态页面 + WebSocket 低延迟视频流 + 实时配置推送 |
+| 事件记录 | `events.jsonl` + `output/events/` 截图，支持按日期筛选 |
 
 ***
 
 ## 系统架构
 
 ```
-RTSP ──► GStreamer (可选) ──► AsyncCapture 线程读帧
-                                    │
-                                    ▼
-                          检测 (TensorRT / HOG)
-                                    │
-                                    ▼
-                          跟踪 + 规则引擎
-                                    │
-                    ┌───────────────┴───────────────┐
-                    ▼                               ▼
-            OpenCV 本地显示                    Web：HTTP / WS
+RTSP ──► GStreamer NVDEC ──► AsyncCapture 线程读帧
+                                   │
+                                   ▼
+                      YOLO26 TensorRT FP16 推理
+                            (NMS-free, ~3.7ms)
+                                   │
+                                   ▼
+                         质心跟踪 + 规则引擎
+                                   │
+                   ┌───────────────┴───────────────┐
+                   ▼                               ▼
+           OpenCV 本地显示                    Web：HTTP + WS
+                                            (视频流 + 配置)
 ```
-
-- **主进程**：`app/behavior_demo.py` 中的 `BehaviorDemo` 循环读帧、推理、画框、写事件。
-- **Web**：
-  - 优先加载 `app/web_server_optimized.py`（需 `pip install websockets`）：HTTP 页面 + 视频 WebSocket + 配置 WebSocket，低延迟 JPEG 推送。
-  - 若 `import web_server_optimized` 失败，回退到 `app/web_server.py`（仅标准库 + MJPEG `/api/stream`）。
 
 ***
 
@@ -65,87 +91,54 @@ RTSP ──► GStreamer (可选) ──► AsyncCapture 线程读帧
 
 ### 硬件
 
-- **测试设备**: NVIDIA Jetson Orin Nano 8G (Seeed Industrial J3011)
-- 可选：PoE 网口连接 IP 摄像头、HDMI 本地调试
+- **推荐设备**：[Seeed reComputer Industrial](https://www.seeedstudio.com/reComputer-Industrial-c-2013.html) 系列（Jetson Orin NX / Orin Nano）
+- 支持任何运行 JetPack 6.x 的 NVIDIA Jetson 设备
+- 可选：PoE 网口连接 IP 摄像头
 
-### 软件（典型 JetPack 镜像）
+### 软件
 
 - **JetPack 6.x**（Ubuntu 22.04）
 - **Python 3.10+**
-- **OpenCV** 带 **GStreamer** 后端（`cv2.getBuildInformation()` 中 GStreamer: YES）
-- **TensorRT 10.x**（与 JetPack 匹配的 Python 包 `tensorrt`）
-
-### 支持的摄像头设备
-
-#### 当前测试使用的摄像头
-
-- **品牌/类型**: 明创达网络摄像机
-- **型号**: MCD-300W
-- **分辨率**: 300 万像素（3MP），IP 高清彩色摄像机
-- **支持协议**: ONVIF 协议（可兼容大部分 NVR 和第三方监控平台）
-
-> **提示**: 不推荐使用小品牌型号
->
-> 此类摄像头**没有提供 ARM 架构的 SDK**，仅支持标准 ONVIF/RTSP 协议。虽然可以通过 RTSP 流进行基本监控，但无法使用摄像头的高级功能（如 PTZ 控制、特定事件检测等）。
->
-> **推荐方案**: 建议开发者选择支持 ARM 架构 SDK 的摄像头品牌，例如：
->
-> - 海康威视（Hikvision）部分型号
-> - 大华（Dahua）部分型号
-> - 宇视（Uniview）部分型号
->
-> 这些品牌通常提供更完善的 ARM SDK，可以充分发挥项目中的传输协议和高级功能。
-
-#### 项目支持的传输协议
-
-本项目支持以下摄像头接入方式：
-
-1. **RTSP 协议**（推荐）
-   - 标准 RTSP 流的 IP 摄像头
-   - 通过 ONVIF 协议自动发现摄像头
-   - 适用于所有支持 RTSP 的网络摄像机
-2. **USB 摄像头**
-   - 标准 UVC 协议的 USB 摄像头
-   - Jetson 兼容的 USB 视觉模块
-3. **MIPI CSI 摄像头**
-   - Jetson 原生的 MIPI CSI 接口摄像头模块
-   - 需要特定的设备树配置和驱动支持
+- **OpenCV** 带 GStreamer 后端
+- **TensorRT 10.x**（JetPack 自带）
+- **CUDA 12.x**（JetPack 自带）
 
 ### Python 额外包
 
-- **默认路径**：不安装额外 pip 包即可运行检测 + 基础 Web（`web_server.py`）。
-- **优化 Web（推荐）**：需要安装 `websockets`，否则自动使用简易版 HTTP 服务：
-
 ```bash
-pip3 install --user websockets
+pip3 install --user numpy websockets
 ```
+
+> TensorRT / CUDA / cuDNN 由 JetPack 系统提供，无需 pip 安装。
 
 ***
 
 ## 仓库结构
 
 ```
-industrial-security-demo/
+Industrial-security-demo/
 ├── app/
-│   ├── behavior_demo.py        # 主程序：采集、检测、跟踪、规则、显示
-│   ├── yolo_trt_detector.py   # TensorRT / OpenCV DNN 检测器（多 ONNX 头格式）
-│   ├── web_server.py          # 轻量 HTTP + MJPEG（stdlib）
-│   └── web_server_optimized.py # 优化：WebSocket 视频 + 配置（需 websockets）
+│   ├── behavior_demo.py         # 主程序：采集、检测、跟踪、规则、显示
+│   ├── yolo_trt_detector.py     # TensorRT / DNN 检测器（v5/v8/v11/v26 自动识别）
+│   ├── web_server.py            # 轻量 HTTP + MJPEG（stdlib）
+│   └── web_server_optimized.py  # 优化 WebSocket 视频 + 配置（需 websockets）
 ├── config/
-│   └── demo_config.json       # 摄像头、检测器、规则、显示、Web
+│   └── demo_config.json         # 摄像头、检测器、规则、显示、Web 配置
 ├── models/
-│   ├── yolov5n.onnx           # 默认 YOLOv5n ONNX
-│   └── yolov5n_fp16.engine    # 首次 TRT 推理生成或 trtexec 编译
+│   ├── yolo26n.onnx             # 默认 YOLO26n ONNX（NMS-free）
+│   ├── yolo26n_fp16.engine      # TensorRT FP16 引擎（设备上构建）
+│   ├── yolov5n.onnx             # 可选 YOLOv5n
+│   └── yolov8n.onnx             # 可选 YOLOv8n
 ├── web/
-│   ├── index.html             # 监控面板（优化路径下由前端使用）
-│   └── index_optimized.html   # 可选备用页面
+│   ├── index.html
+│   └── index_optimized.html     # 优化版 Web 面板（区域绘制、WS 视频流）
 ├── output/
-│   ├── events.jsonl           # 事件日志
-│   └── events/                # 事件截图（可选上限与清理逻辑见代码）
+│   ├── events.jsonl             # 事件日志
+│   └── events/                  # 事件截图
 ├── scripts/
-│   └── probe_camera.py        # RTSP 路径探测
-├── build_yolov8_engine.py    # 使用 trtexec 为 YOLOv8n 构建 engine（可选）
-├── run_demo.sh                # 一键启动（设置 DISPLAY / 字体等）
+│   └── probe_camera.py          # RTSP 路径探测
+├── build_yolov8_engine.py       # 可选 trtexec 构建脚本
+├── run_demo.sh                  # 一键启动
 └── README.md
 ```
 
@@ -154,35 +147,24 @@ industrial-security-demo/
 ## 快速开始
 
 ```bash
-cd industrial-security-demo
+cd Industrial-security-demo
 
-# 确认模型存在（默认 yolov5n）
+# 1. 安装依赖
+pip3 install --user numpy websockets
+
+# 2. 确认模型存在
 ls -la models/
 
-# 若缺少 ONNX，可下载（示例为官方资源链接，以实际可用地址为准）
-wget -O models/yolov5n.onnx \
-  https://github.com/ultralytics/assets/releases/download/v7.0/yolov5n.onnx
-```
-
-启动（使用 `config/demo_config.json`）：
-
-```bash
+# 3. 启动（使用配置文件）
 bash run_demo.sh
-```
 
-仅后台 + Web（无本地窗口）：
-
-```bash
+# 或仅后台 + Web（无本地窗口，适合 SSH）
 python3 app/behavior_demo.py --no-window
 ```
 
-指定端口（覆盖配置中的 `web.port`）：
+浏览器打开：`http://<Jetson的IP>:8080`
 
-```bash
-python3 app/behavior_demo.py --no-window --web-port 8080
-```
-
-短时间自检（跑固定帧数后退出）：
+### 短时间自检
 
 ```bash
 python3 app/behavior_demo.py --no-window --no-web --max-frames 100
@@ -194,15 +176,9 @@ python3 app/behavior_demo.py --no-window --no-web --max-frames 100
 
 ### 1. 网络与摄像头
 
-- 保证 Jetson 与摄像头 **IP 互通**（同一网段或正确路由）。
-- 常见做法：为连接摄像头的网口配置静态 IP，例如：
+确保 Jetson 与摄像头在同一网段：
 
 ```bash
-# 示例：网口名以实际为准（如 enP8p1s0）
-sudo nmcli connection add type ethernet ifname <网口名> \
-  con-name camera-lan ipv4.method manual \
-  ipv4.addresses 192.168.1.2/24 ipv6.method disabled
-sudo nmcli connection up camera-lan
 ping -c 3 <摄像头IP>
 ```
 
@@ -212,17 +188,20 @@ ping -c 3 <摄像头IP>
 python3 scripts/probe_camera.py --ip <摄像头IP> --user admin --password ""
 ```
 
-将输出的可用 `rtsp://...` 写入 `config/demo_config.json` 的 `camera.source`。
+将输出的 `rtsp://...` 写入 `config/demo_config.json` 的 `camera.source`。
 
-### 3. 防火墙与端口
+### 3. 构建 TensorRT 引擎（首次/换设备时）
 
-默认 HTTP：**8080**。若使用优化 Web 服务，启动日志会打印类似：
-
-```text
-[Web] HTTP:8080 WS:8081 ConfigWS:8082
+```bash
+/usr/src/tensorrt/bin/trtexec \
+  --onnx=models/yolo26n.onnx \
+  --saveEngine=models/yolo26n_fp16.engine \
+  --fp16
 ```
 
-需在主机防火墙放行对应端口，例如：
+> 引擎绑定硬件，不同 Jetson 设备之间不可混用，需在目标设备上构建。
+
+### 4. 防火墙
 
 ```bash
 sudo ufw allow 8080/tcp
@@ -230,59 +209,45 @@ sudo ufw allow 8081/tcp
 sudo ufw allow 8082/tcp
 ```
 
-### 4. 远程访问面板
+### 5. 长期运行
 
-浏览器打开：
+可使用 `systemd` 注册为服务：
 
-```text
-http://<Jetson的IP>:8080
+```bash
+python3 app/behavior_demo.py --no-window
 ```
-
-### 5. 无显示器 / SSH 启动
-
-使用 `--no-window`；若需本地 HDMI 窗口，`run_demo.sh` 会尝试设置 `DISPLAY` 与 `XAUTHORITY`。
-
-### 6. 长期运行（可选）
-
-可使用 `systemd` 将 `python3 app/behavior_demo.py --no-window` 注册为服务，注意工作目录设为项目根、`User` 与 `WorkingDirectory` 一致，并处理日志轮转。
 
 ***
 
 ## 配置说明
 
-配置文件：`config/demo_config.json`。
+配置文件：`config/demo_config.json`
 
 ### 摄像头 `camera`
 
-| 字段              | 含义                                    |
-| --------------- | ------------------------------------- |
-| `source`        | RTSP URL 或摄像头索引字符串 `"0"`              |
-| `use_gstreamer` | `true` 时对 `rtsp://` 使用 GStreamer 硬解管线 |
+| 字段 | 含义 |
+|------|------|
+| `source` | RTSP URL 或摄像头索引 `"0"` |
+| `use_gstreamer` | `true` 使用 GStreamer NVDEC 硬解 |
 
 ### 检测器 `detector`
 
-| 字段                                 | 含义                                                     |
-| ---------------------------------- | ------------------------------------------------------ |
-| `backend`                          | `yolov5_trt`：TensorRT 引擎；`opencv_hog`：不依赖模型，CPU HOG 行人 |
-| `onnx_file`                        | `models/` 下 ONNX 文件名                                   |
-| `conf_threshold` / `iou_threshold` | 置信度与 NMS                                               |
-| `fp16`                             | TensorRT FP16 推理                                       |
-| `infer_interval`                   | 每 N 帧推理一次，大于 1 可降低算力占用                                 |
-
-### 跟踪 `tracker`
-
-- `max_distance`：匹配同一目标的最大像素距离
-- `max_age_seconds`：丢失后保留轨迹的时间
+| 字段 | 含义 |
+|------|------|
+| `backend` | `yolov5_trt`：TensorRT 推理 |
+| `onnx_file` | `models/` 下 ONNX 文件名，如 `yolo26n.onnx` |
+| `conf_threshold` | 置信度阈值 |
+| `iou_threshold` | NMS IoU 阈值（v5/v8 使用，v26 NMS-free 忽略） |
+| `fp16` | TensorRT FP16 推理 |
+| `infer_interval` | 每 N 帧推理一次 |
 
 ### 规则 `rules`
 
-- `zones`：多边形顶点为 **归一化坐标** `[0,1]`
-- `lines`：`start` / `end` 同样为归一化坐标
+- `zones`：多边形顶点为归一化坐标 `[0,1]`，可在浏览器中交互绘制
+- `lines`：`start` / `end` 为归一化坐标
 - `event_cooldown_seconds`：同类事件冷却时间
 
-### 功能开关 `features`（可选）
-
-未配置时，代码内默认全部为 `true`。可按需关闭以减负：
+### 功能开关 `features`
 
 ```json
 "features": {
@@ -294,89 +259,120 @@ http://<Jetson的IP>:8080
 }
 ```
 
-### 显示 `display`
-
-- `resize_width`：按宽度缩放，0 表示不缩放
-- `jpeg_quality`：优化 Web 路径下 JPEG 质量（1–100），见前端与 `web_server_optimized`
-
-### Web `web`
-
-- `port`：HTTP 端口（默认 8080）
-- `ws_port` / `config_ws_port`：优化服务使用（若未设置，代码中会用 `port+1`、`port+2` 作为默认）
-
-***
-
-## Web 与优化模式
-
-### 简易模式（`web_server.py`）
-
-- 依赖少：标准库 HTTP + OpenCV JPEG
-- 视频：`GET /api/stream`（MJPEG）
-- 事件：`GET /api/events`，统计：`GET /api/stats`，配置：`GET/POST /api/config`、`POST /api/rules`
-
-### 优化模式（`web_server_optimized.py`）
-
-需 `websockets`：
-
-- **双 WebSocket**：视频流与配置分离，减少互相阻塞
-- **动态 JPEG 质量**、帧缓冲策略、功能开关与统计由前端与后端协同（详见 `web/index.html` 与优化服务器实现）
-- 若优化模块不可用，自动回退简易模式，不中断主程序
-
 ***
 
 ## 模型与 TensorRT 引擎
 
-1. 将 ONNX 放在 `models/` 下，在 `demo_config.json` 中设置 `detector.onnx_file`。
-2. 检测器会查找同名 `*_fp16.engine`（见 `YOLOv5TRTDetector` 内逻辑）；若不存在会尝试构建或回退 DNN（见代码与日志）。
-3. **YOLOv8 专用构建脚本**（可选）：`build_yolov8_engine.py` 调用系统 `trtexec` 生成 `yolov8n_fp16.engine`（路径与文件名以脚本内为准）。
+### 支持的模型
 
-引擎与 **不同 Jetson 设备**混用可能触发 TensorRT 警告或错误；请在目标设备上生成 engine。
+| 模型 | 输出格式 | NMS | 说明 |
+|------|----------|-----|------|
+| **YOLO26n** (默认) | `(1, 300, 6)` | 内置 (NMS-free) | 最新架构，边缘最优 |
+| YOLOv5n | `(1, 25200, 85)` | 后处理 | 经典轻量 |
+| YOLOv8n | `(1, 84, 8400)` | 后处理 | 精度/速度平衡 |
+| YOLO11n | 同 v8 | 后处理 | v8 架构升级 |
+
+### 性能对比 (Jetson Orin NX 16G, FP16)
+
+| 模型 | GPU 延迟 | 吞吐量 |
+|------|----------|--------|
+| YOLO26n | 3.72ms | 268 QPS |
+| YOLOv5n | 2.96ms | 337 QPS |
+| YOLOv8n | 3.89ms | 256 QPS |
+
+### 引擎构建
+
+检测器首次运行时自动构建引擎（调用 `trtexec`），也可手动：
+
+```bash
+/usr/src/tensorrt/bin/trtexec --onnx=models/<model>.onnx --saveEngine=models/<model>_fp16.engine --fp16
+```
+
+***
+
+## 自训练模型与二次开发
+
+### 使用自训练 YOLO 模型
+
+1. 在任意机器上训练 YOLO 模型并导出 ONNX：
+
+```python
+from ultralytics import YOLO
+model = YOLO("yolo26n.pt")
+model.train(data="your_dataset.yaml", epochs=100)
+model.export(format="onnx", imgsz=640)
+```
+
+2. 将导出的 `.onnx` 复制到 `models/` 目录
+3. 在 `config/demo_config.json` 中修改 `detector.onnx_file`
+4. 首次运行时自动构建 TensorRT 引擎
+
+### 扩展开发
+
+- **新检测后端**：在 `app/behavior_demo.py` 的 `create_detector()` 中扩展
+- **新规则**：在 `BehaviorDemo._apply_rules` 中添加事件类型
+- **前端定制**：修改 `web/` 下的 HTML/CSS/JS，刷新浏览器即可
+- **API 对接**：使用 REST API 获取实时数据，对接上层平台
 
 ***
 
 ## API 与事件输出
 
-- 事件以 **JSON Lines** 写入 `output/events.jsonl`（路径由 `output.root` 决定）。
-- 每条含时间戳、`event_type`、`track_id`、`bbox`、`centroid` 等。
-- 截图保存在 `output/events/`，数量过多时实现侧可能清理旧文件（见 `EventWriter`）。
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/api/stats` | GET | 实时统计（FPS、检测数、跟踪数、事件数） |
+| `/api/events` | GET | 事件列表，支持 `?date=YYYYMMDD` 筛选 |
+| `/api/events/images` | GET | 事件截图列表，支持 `?date=YYYYMMDD` 筛选 |
+| `/api/events/img/<name>` | GET | 事件截图图片 |
+| `/api/config` | GET/POST | 读取/更新运行时配置 |
+| `/api/models` | GET | 可用模型列表 |
+| `/api/model/switch` | POST | 运行时切换模型 |
+| `/api/stream` | GET | MJPEG 视频流（HTTP 回退） |
+| `/api/events/clear` | POST | 清空事件日志 |
+
+WebSocket 端口：
+- `:8081` — 视频流（二进制 JPEG 帧）
+- `:8082` — 配置通道（JSON 双向）
+
+***
+
+## Web 与优化模式
+
+安装 `websockets` 后自动启用优化模式：
+
+- **双 WebSocket**：视频流与配置通道分离，互不阻塞
+- **动态 JPEG 质量**：浏览器滑块实时调节
+- **交互式区域绘制**：在视频上直接画多边形检测区域
+- **功能开关**：浏览器中实时开关检测/跟踪/区域/越线/徘徊
+- **实时事件流**：带缩略图的事件列表，按日期筛选
+
+若 `websockets` 不可用，自动回退到 HTTP MJPEG 模式。
 
 ***
 
 ## 命令行参数
 
-`python3 app/behavior_demo.py`：
-
-| 参数             | 说明                                  |
-| -------------- | ----------------------------------- |
-| `--config`     | 配置文件路径，默认 `config/demo_config.json` |
-| `--source`     | 覆盖配置中的视频源                           |
-| `--max-frames` | 运行若干帧后退出                            |
-| `--no-window`  | 不显示 OpenCV 窗口                       |
-| `--no-web`     | 不启动 Web                             |
-| `--web-port`   | 覆盖 HTTP 端口                          |
-
-`run_demo.sh` 会把参数原样传给 `behavior_demo.py`。
+| 参数 | 说明 |
+|------|------|
+| `--config` | 配置文件路径，默认 `config/demo_config.json` |
+| `--source` | 覆盖配置中的视频源 |
+| `--max-frames` | 运行若干帧后退出 |
+| `--no-window` | 不显示 OpenCV 窗口 |
+| `--no-web` | 不启动 Web 服务 |
+| `--web-port` | 覆盖 HTTP 端口 |
 
 ***
 
 ## 故障排查
 
-| 现象                             | 处理方向                                                               |
-| ------------------------------ | ------------------------------------------------------------------ |
-| `Cannot open video source`     | 检查 RTSP URL、`ping` 摄像头、`probe_camera.py`；尝试 `use_gstreamer: false` |
-| TensorRT 初始化失败                 | 查看是否缺 engine、ONNX 是否匹配；必要时重新 trtexec 生成                            |
-| `Address already in use`（8080） | 更换 `--web-port` 或结束占用进程：`ss -ltnp \| grep 8080`                    |
-| 优化 Web 不生效                     | 安装 `pip3 install --user websockets`，查看启动日志是否只有 `HTTP:端口`           |
-| 无画面 / DISPLAY                  | SSH 无桌面时用 `--no-window`，仅用 Web                                     |
-| 检测框与规则不触发                      | 确认 `features` 中 `human_detect`/`tracking` 与规则开关                    |
-
-***
-
-## 开发与扩展
-
-- **新检测后端**：在 `create_detector()` 中扩展分支，或替换 ONNX/TRT 流程。
-- **规则**：在 `BehaviorDemo._apply_rules` 中扩展事件类型（注意与 `features` 配合）。
-- **前端**：静态资源在 `web/`，修改后刷新浏览器即可（强缓存时可硬刷新）。
+| 现象 | 处理方向 |
+|------|----------|
+| `Cannot open video source` | 检查 RTSP URL、ping 摄像头、使用 `probe_camera.py` |
+| TensorRT 初始化失败 | 检查 engine 文件是否在当前设备上构建 |
+| `Address already in use` | `--web-port` 换端口或 `ss -ltnp \| grep 8080` |
+| YOLO26 DNN 回退失败 | YOLO26 NMS-free 需要 TensorRT，不支持 OpenCV DNN 回退 |
+| 无画面 / DISPLAY | SSH 时用 `--no-window`，仅用 Web |
+| 区域/越线不触发 | 检查 `features` 中 `zone_detection`/`line_crossing` 开关 |
 
 ***
 
@@ -384,97 +380,32 @@ http://<Jetson的IP>:8080
 
 ### 镜像特点
 
-- ✅ **无需登录**：使用 Ubuntu 官方镜像，无需 NGC 登录
-- ✅ **体积极小**：压缩后仅 **333 MB**（原方案约 5GB）
-- ✅ **适配性强**：不绑定特定 L4T 版本，跨 JetPack 版本兼容
-- ✅ **开箱即用**：已配置 TensorRT Python 包，无需手动映射
+- **无需 NGC 登录**：基于 `ubuntu:22.04`
+- **体积极小**：压缩后仅 ~333 MB
+- **适配性强**：不绑定特定 L4T 版本
 
 ### 快速开始
 
-#### 1. 构建镜像
-
 ```bash
-cd industrial-security-demo
+# 构建
 docker build --network=host -t industrial-security-demo:latest .
-```
 
-> **提示**：使用 `--network=host` 可避免部分网络环境问题
-
-#### 2. 运行容器
-
-```bash
+# 运行
 docker compose up -d
+
+# 访问
+http://<Jetson-IP>:8080
 ```
 
-或手动运行：
+### 离线部署
 
 ```bash
-docker run -d \
-  --runtime=nvidia \
-  --network=host \
-  --privileged \
-  -v "$(pwd)/config:/app/config:ro" \
-  -v "$(pwd)/models:/app/models:ro" \
-  -v "$(pwd)/output:/app/output" \
-  -v /usr/lib/aarch64-linux-gnu:/usr/lib/aarch64-linux-gnu:ro \
-  -v /usr/local/cuda:/usr/local/cuda:ro \
-  -v /usr/lib/python3.10/dist-packages/tensorrt:/usr/lib/python3/dist-packages/tensorrt:ro \
-  industrial-security-demo:latest
-```
-
-#### 3. 查看状态
-
-```bash
-# 查看日志
-docker logs -f industrial-security-demo
-
-# 查看运行状态
-docker ps
-```
-
-#### 4. 访问 Web 界面
-
-浏览器打开：`http://<Jetson-IP>:8080`
-
-### 离线部署（导出/导入镜像）
-
-#### 导出镜像
-
-```bash
+# 导出
 bash scripts/docker-export.sh industrial-security-demo:latest ./industrial-security-demo.tar.gz
-```
 
-导出文件：`industrial-security-demo.tar.gz`（约 333 MB）
-
-#### 导入镜像（目标设备）
-
-```bash
+# 导入
 gunzip -c industrial-security-demo.tar.gz | docker load
 ```
-
-### 核心优势对比
-
-| 项目 | 优化前 | 优化后 |
-|------|--------|--------|
-| **基础镜像** | nvcr.io/nvidia/l4t-jetpack | ubuntu:22.04 |
-| **镜像大小** | ~5 GB | **333 MB** |
-| **NGC 登录** | 需要 | **不需要** |
-| **TensorRT** | 镜像内置 | 映射主机库 |
-| **跨版本兼容** | 绑定 L4T 版本 | ✅ 支持多版本 |
-
-### 常见问题
-
-**Q: 为什么使用 `--network=host` 构建？**  
-A: 避免 Docker Hub 网络超时问题，同时解决部分 iptables 兼容性问题。
-
-**Q: TensorRT 版本不匹配怎么办？**  
-A: 镜像已映射主机 TensorRT Python 包，确保主机 JetPack 版本与容器兼容即可。
-
-**Q: 可以在 x86 服务器上构建吗？**  
-A: 不可以，必须在 ARM64 架构的 Jetson 设备上构建。
-
-**Q: 如何更新应用代码？**  
-A: 重新构建镜像：`docker build --network=host -t industrial-security-demo:latest .`
 
 ***
 

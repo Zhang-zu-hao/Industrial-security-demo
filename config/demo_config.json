@@ -7,7 +7,7 @@
   },
   "detector": {
     "backend": "yolov5_trt",
-    "onnx_file": "yolov5n.onnx",
+    "onnx_file": "yolo26n.onnx",
     "conf_threshold": 0.35,
     "iou_threshold": 0.45,
     "fp16": true,
@@ -38,7 +38,7 @@
     ]
   },
   "output": {
-    "root": "/home/seeed/industrial-security-demo/output",
+    "root": "/home/seeed/Industrial-security-demo/output",
     "save_snapshots": true
   },
   "display": {
