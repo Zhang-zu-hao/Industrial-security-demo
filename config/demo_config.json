@@ -38,7 +38,7 @@
     ]
   },
   "output": {
-    "root": "/home/seeed/Industrial-security-demo/output",
+    "root": "/app/output",
     "save_snapshots": true
   },
   "display": {
