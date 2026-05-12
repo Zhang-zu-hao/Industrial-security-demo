@@ -37,7 +37,16 @@ dist/
 # Scripts (not needed in container)
 run_demo.sh
 build_yolov8_engine.py
+install-docker-jetson.sh
 
 # Test files
 tests/
 *.test.py
+
+# Docker files (not needed inside container)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Shell scripts in scripts/ (keep scripts/probe_camera.py if needed)
+scripts/*.sh

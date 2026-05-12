@@ -25,17 +25,19 @@ services:
       - /usr/local/cuda:/usr/local/cuda:ro
       - /usr/lib/tensorrt:/usr/lib/tensorrt:ro
       - /var/run/dbus:/var/run/dbus:ro
-      - /usr/lib/python3.10/dist-packages/tensorrt:/usr/lib/python3/dist-packages/tensorrt:ro
-      - /usr/lib/python3.10/dist-packages/tensorrt_dispatch:/usr/lib/python3/dist-packages/tensorrt_dispatch:ro
-      - /usr/lib/python3.10/dist-packages/tensorrt_lean:/usr/lib/python3/dist-packages/tensorrt_lean:ro
+      # TensorRT Python 绑定（JetPack 6.x）
+      - /usr/lib/python3/dist-packages/tensorrt:/usr/lib/python3/dist-packages/tensorrt:ro
+      - /usr/lib/python3/dist-packages/tensorrt_dispatch:/usr/lib/python3/dist-packages/tensorrt_dispatch:ro
+      - /usr/lib/python3/dist-packages/tensorrt_lean:/usr/lib/python3/dist-packages/tensorrt_lean:ro
+      - /usr/lib/python3/dist-packages/pycuda:/usr/lib/python3/dist-packages/pycuda:ro
     devices:
-      - /dev/video0:/dev/video0
       - /dev/nvidia0:/dev/nvidia0
       - /dev/nvidiactl:/dev/nvidiactl
       - /dev/nvmap:/dev/nvmap
       - /dev/nvhost-ctrl:/dev/nvhost-ctrl
-      - /dev/nvhost-ctrl-isp:/dev/nvhost-ctrl-isp
-      - /dev/nvhost-vic:/dev/nvhost-vic
+      # 摄像头设备（按需取消注释）
+      # - /dev/video0:/dev/video0
+      # - /dev/video1:/dev/video1
     cap_add:
       - SYS_ADMIN
       - NET_ADMIN
