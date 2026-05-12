@@ -398,7 +398,8 @@ class BehaviorDemo:
             show = False
         if show:
             try:
-                cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
+                cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
+                cv2.setWindowProperty(self.window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
             except cv2.error:
                 show = False
 

@@ -30,4 +30,5 @@ if [[ -d /usr/share/fonts ]] && [[ -z "${QT_QPA_FONTDIR:-}" ]]; then
 fi
 
 echo "Launching demo with DISPLAY=${DISPLAY:-unset} XAUTHORITY=${XAUTHORITY:-unset}"
+echo "HDMI window will auto-fullscreen on startup"
 python3 -u "${SCRIPT_DIR}/app/behavior_demo.py" --config "${CONFIG_PATH}" "$@"

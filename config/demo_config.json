@@ -20,22 +20,8 @@
   },
   "rules": {
     "event_cooldown_seconds": 8,
-    "zones": [
-      {
-        "name": "restricted_area",
-        "dwell_seconds": 10,
-        "color_bgr": [0, 255, 255],
-        "points": [[0.60, 0.22], [0.94, 0.22], [0.94, 0.88], [0.60, 0.88]]
-      }
-    ],
-    "lines": [
-      {
-        "name": "gate_line",
-        "color_bgr": [255, 0, 255],
-        "start": [0.20, 0.55],
-        "end": [0.78, 0.55]
-      }
-    ]
+    "zones": [],
+    "lines": []
   },
   "output": {
     "root": "/home/seeed/Industrial-security-demo/output",

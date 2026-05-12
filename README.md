@@ -43,6 +43,7 @@
 - [快速开始](#快速开始)
 - [部署教程](#部署教程)
 - [配置说明](#配置说明)
+- [Web 端区域绘制](#web-端区域绘制)
 - [模型与 TensorRT 引擎](#模型与-tensorrt-引擎)
 - [自训练模型与二次开发](#自训练模型与二次开发)
 - [API 与事件输出](#api-与事件输出)
@@ -64,6 +65,7 @@
 | 行为规则 | 区域入侵、越线、徘徊（支持浏览器交互绘制检测区域） |
 | Web 面板 | 静态页面 + WebSocket 低延迟视频流 + 实时配置推送 |
 | 事件记录 | `events.jsonl` + `output/events/` 截图，支持按日期筛选 |
+| HDMI 全屏显示 | 启动后自动全屏显示在 HDMI 连接的显示器上 |
 
 ***
 
@@ -82,7 +84,7 @@ RTSP ──► GStreamer NVDEC ──► AsyncCapture 线程读帧
                    ┌───────────────┴───────────────┐
                    ▼                               ▼
            OpenCV 本地显示                    Web：HTTP + WS
-                                            (视频流 + 配置)
+          (HDMI 自动全屏)                     (视频流 + 配置)
 ```
 
 ***
@@ -130,8 +132,7 @@ Industrial-security-demo/
 │   ├── yolov5n.onnx             # 可选 YOLOv5n
 │   └── yolov8n.onnx             # 可选 YOLOv8n
 ├── web/
-│   ├── index.html
-│   └── index_optimized.html     # 优化版 Web 面板（区域绘制、WS 视频流）
+│   └── index.html               # Web 面板（区域绘制、WS 视频流）
 ├── output/
 │   ├── events.jsonl             # 事件日志
 │   └── events/                  # 事件截图
@@ -261,6 +262,29 @@ python3 app/behavior_demo.py --no-window
 
 ***
 
+## Web 端区域绘制
+
+### 绘制检测区域
+
+1. 打开浏览器访问 `http://<Jetson的IP>:8080`
+2. 在右侧控制面板找到"检测区域"部分
+3. 点击"启用区域绘制"开关
+4. 在视频画面上点击鼠标左键绘制多边形顶点（至少 3 个点）
+5. 绘制完成后自动保存，或点击"完成绘制"/"取消"按钮
+
+### 管理检测区域
+
+- **查看区域列表**：已绘制的区域会显示在控制面板中
+- **删除单个区域**：点击区域旁边的 ✕ 按钮
+- **清空所有区域**：点击"清空所有区域"按钮
+
+### 区域参数
+
+- **徘徊时间**：在"检测规则"中设置徘徊检测的时间阈值（秒）
+- **冷却时间**：同类事件的最小间隔时间（秒）
+
+***
+
 ## 模型与 TensorRT 引擎
 
 ### 支持的模型
@@ -325,6 +349,7 @@ model.export(format="onnx", imgsz=640)
 | `/api/events/images` | GET | 事件截图列表，支持 `?date=YYYYMMDD` 筛选 |
 | `/api/events/img/<name>` | GET | 事件截图图片 |
 | `/api/config` | GET/POST | 读取/更新运行时配置 |
+| `/api/rules` | POST | 更新检测规则（区域、线等） |
 | `/api/models` | GET | 可用模型列表 |
 | `/api/model/switch` | POST | 运行时切换模型 |
 | `/api/stream` | GET | MJPEG 视频流（HTTP 回退） |
@@ -345,6 +370,7 @@ WebSocket 端口：
 - **交互式区域绘制**：在视频上直接画多边形检测区域
 - **功能开关**：浏览器中实时开关检测/跟踪/区域/越线/徘徊
 - **实时事件流**：带缩略图的事件列表，按日期筛选
+- **自动重连**：WebSocket 断开后自动重连（指数退避）
 
 若 `websockets` 不可用，自动回退到 HTTP MJPEG 模式。
 
@@ -373,6 +399,7 @@ WebSocket 端口：
 | YOLO26 DNN 回退失败 | YOLO26 NMS-free 需要 TensorRT，不支持 OpenCV DNN 回退 |
 | 无画面 / DISPLAY | SSH 时用 `--no-window`，仅用 Web |
 | 区域/越线不触发 | 检查 `features` 中 `zone_detection`/`line_crossing` 开关 |
+| HDMI 窗口不全屏 | 检查 DISPLAY 环境变量，确保 X11 服务正常运行 |
 
 ***
 

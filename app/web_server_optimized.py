@@ -140,11 +140,18 @@ class EventStore:
             # 没有日期筛选，返回最近的 events
             return self.recent(limit)
         
-        events = []
+        # 先从内存缓存中查找
+        with self._lock:
+            cached_events = [e for e in self._events if e.get("timestamp", "").startswith(date_str)]
+            if cached_events:
+                return cached_events[:limit]
+        
+        # 如果内存中没有，再从文件读取
         log_path = Path(__file__).resolve().parent.parent / "output" / "events.jsonl"
         if not log_path.is_file():
             return []
         
+        events = []
         try:
             with open(log_path, "r", encoding="utf-8") as f:
                 for line in f:
@@ -191,7 +198,8 @@ class StatsCollector:
             self._last_update = time.time()
 
     def update_events(self, total_events: int) -> None:
-        pass
+        with self._lock:
+            pass  # Events count is fetched directly from event_store.total
 
     def snapshot(self) -> Dict[str, Any]:
         with self._lock:
@@ -302,30 +310,24 @@ async def websocket_handler(websocket):
     last_ts = 0.0
     
     try:
-        await websocket.ping()
-        
         while True:
-            ts = frame_buffer.timestamp
-            if ts > last_ts:
-                frame = frame_buffer.get()
-                if frame is not None:
-                    try:
+            try:
+                ts = frame_buffer.timestamp
+                if ts > last_ts:
+                    frame = frame_buffer.get()
+                    if frame is not None:
                         await websocket.send(frame)
                         last_ts = ts
-                    except websockets.exceptions.ConnectionClosed:
-                        break
-                    except Exception:
-                        break
-                await asyncio.sleep(0.005)
-            else:
-                await asyncio.sleep(0.003)
-            
-    except websockets.exceptions.ConnectionClosed as ce:
-        print(f"[WS] Video connection closed: {ce.code}")
-    except websockets.exceptions.InvalidMessage as im:
-        print(f"[WS] Video invalid message: {im}")
+                    await asyncio.sleep(0.005)
+                else:
+                    await asyncio.sleep(0.003)
+            except websockets.exceptions.ConnectionClosed:
+                break
+            except Exception:
+                break
     except Exception as e:
-        print(f"[WS] Video handler error: {e}")
+        if "Connection closed" not in str(e):
+            print(f"[WS] Video handler error: {e}")
     finally:
         ws_manager.remove_client(websocket)
 
@@ -337,7 +339,6 @@ async def config_handler(websocket):
             try:
                 data = json.loads(message)
                 
-                # Handle feature flags, rules, and detector config
                 if isinstance(data, dict):
                     if "features" in data or "rules" in data or "detector" in data:
                         update_config(data)
@@ -348,19 +349,16 @@ async def config_handler(websocket):
                         frame_buffer.set_quality(int(quality))
                         await websocket.send(json.dumps({"status": "ok"}))
                     
-            except json.JSONDecodeError as jde:
-                print(f"[WS] Config JSON decode error: {jde}")
+            except json.JSONDecodeError:
                 pass
-            except Exception as proc_err:
-                print(f"[WS] Config process error: {proc_err}")
+            except Exception:
                 pass
                 
-    except websockets.exceptions.ConnectionClosed as ce:
-        print(f"[WS] Config connection closed: {ce.code}")
-    except websockets.exceptions.InvalidMessage as im:
-        print(f"[WS] Config invalid message: {im}")
+    except websockets.exceptions.ConnectionClosed:
+        pass
     except Exception as e:
-        print(f"[WS] Config handler error: {e}")
+        if "Connection closed" not in str(e):
+            print(f"[WS] Config handler error: {e}")
 
 
 def start_websocket_servers(port: int = 8081, config_port: int = 8082):
@@ -408,9 +406,9 @@ def start_websocket_servers(port: int = 8081, config_port: int = 8082):
             # Video streaming server with optimized settings for stability
             video_server = await websockets.serve(
                 websocket_handler, "0.0.0.0", ws_port,
-                ping_interval=15,
-                ping_timeout=10,
-                close_timeout=5,
+                ping_interval=30,
+                ping_timeout=30,
+                close_timeout=10,
                 max_size=2*1024*1024,
                 max_queue=1,
             )
@@ -418,9 +416,9 @@ def start_websocket_servers(port: int = 8081, config_port: int = 8082):
 
             config_server = await websockets.serve(
                 config_handler, "0.0.0.0", cfg_port,
-                ping_interval=15,
-                ping_timeout=10,
-                close_timeout=5,
+                ping_interval=30,
+                ping_timeout=30,
+                close_timeout=10,
             )
             print(f"[WS] ✅ Config: ws://0.0.0.0:{cfg_port}")
 
@@ -500,29 +498,28 @@ class DemoHandler(SimpleHTTPRequestHandler):
         return event_store.get_events_by_date(date_filter, limit)
 
     def do_GET(self):
-        if self.path == "/api/stream":
+        from urllib.parse import parse_qs, urlparse
+        parsed = urlparse(self.path)
+        path = parsed.path
+        params = parse_qs(parsed.query)
+
+        if path == "/api/stream":
             self._serve_mjpeg()
-        elif self.path == "/api/events/images":
+        elif path == "/api/events/images":
             # 支持按日期筛选：/api/events/images?date=20260416
-            from urllib.parse import parse_qs, urlparse
-            parsed = urlparse(self.path)
-            params = parse_qs(parsed.query)
             date_filter = params.get('date', [None])[0]
             self._serve_event_image_list(date_filter)
-        elif self.path.startswith("/api/events/img/"):
-            self._serve_event_image(self.path[len("/api/events/img/"):])
-        elif self.path.startswith("/api/events"):
+        elif path.startswith("/api/events/img/"):
+            self._serve_event_image(path[len("/api/events/img/"):])
+        elif path.startswith("/api/events"):
             # 支持按日期筛选：/api/events?date=20260416
-            from urllib.parse import parse_qs, urlparse
-            parsed = urlparse(self.path)
-            params = parse_qs(parsed.query)
             date_filter = params.get('date', [None])[0]
             self._json_response(self._get_events_by_date(date_filter, 100))
-        elif self.path == "/api/stats":
+        elif path == "/api/stats":
             self._json_response(stats.snapshot())
-        elif self.path == "/api/config":
+        elif path == "/api/config":
             self._json_response(get_config_snapshot())
-        elif self.path == "/api/models":
+        elif path == "/api/models":
             self._json_response(list_models())
         else:
             self._serve_static()
@@ -584,6 +581,13 @@ class DemoHandler(SimpleHTTPRequestHandler):
         elif self.path == "/api/events/clear":
             event_store.clear()
             self._json_response({"status": "ok"})
+        elif self.path == "/api/rules":
+            try:
+                body = json.loads(self._read_body())
+                update_config({"rules": body})
+                self._json_response({"status": "ok"})
+            except Exception as exc:
+                self._json_response({"error": str(exc)}, 400)
         else:
             self._json_response({"error": "not found"}, 404)
 
