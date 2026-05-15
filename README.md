@@ -4,7 +4,7 @@
   <b>Edge AI-Powered Industrial Security Monitoring on NVIDIA Jetson</b>
 </p>
 
-面向 **Seeed reComputer Industrial** 系列 Jetson 边缘设备的工业安防演示：RTSP/USB 摄像头接入、**TensorRT FP16** 人员检测、质心跟踪、可交互绘制的区域入侵/越线/徘徊规则，以及浏览器实时监控面板。
+面向 **Seeed reComputer Industrial** 系列 Jetson 边缘设备的工业安防演示：**多摄像头** RTSP/USB 接入、**TensorRT FP16** 人员检测、质心跟踪、可交互绘制的区域入侵/越线/徘徊规则，**SQLite 事件持久化**，以及浏览器实时监控面板。
 
 ***
 
@@ -16,9 +16,11 @@
 | **TensorRT FP16 加速** | 利用 Jetson GPU + TensorRT 进行 FP16 量化推理，YOLO26n 延迟仅 ~3.7ms（268 QPS），实时性远超云端方案 |
 | **NMS-Free 端到端推理** | 支持最新 Ultralytics YOLO26，原生无需 NMS 后处理，进一步降低延迟，专为边缘场景优化 |
 | **GStreamer 硬件解码** | Jetson NVDEC 硬解 RTSP 视频流，CPU 几乎零开销 |
+| **多摄像头支持** | 同时接入多路 RTSP 摄像头，独立处理管线，共享检测模型，Web 端自适应网格布局 |
 | **离线部署，低带宽** | 不依赖互联网，适合矿山、工厂、仓库、工地等无网/弱网环境 |
 | **灵活二次开发** | 支持自训练模型 (YOLOv5/v8/v11/v26)、自定义规则、REST API 对接，开箱即用也能深度定制 |
-| **交互式区域配置** | 浏览器中直接在视频画面上绘制检测区域，无需修改配置文件 |
+| **交互式区域配置** | 浏览器中直接在视频画面上绘制检测区域，每个摄像头独立配置，无需修改配置文件 |
+| **事件持久化** | SQLite 数据库存储事件，支持历史查询、按日期筛选，重启不丢失 |
 
 ***
 
@@ -43,7 +45,10 @@
 - [快速开始](#快速开始)
 - [部署教程](#部署教程)
 - [配置说明](#配置说明)
+- [多摄像头管理](#多摄像头管理)
+- [HDMI 显示与全屏切换](#hdmi-显示与全屏切换)
 - [Web 端区域绘制](#web-端区域绘制)
+- [事件持久化与查询](#事件持久化与查询)
 - [模型与 TensorRT 引擎](#模型与-tensorrt-引擎)
 - [自训练模型与二次开发](#自训练模型与二次开发)
 - [API 与事件输出](#api-与事件输出)
@@ -58,33 +63,44 @@
 
 | 能力 | 说明 |
 |------|------|
-| RTSP / USB 视频源 | 支持 `rtsp://...` 与本地摄像头索引（如 `0`） |
+| 多摄像头接入 | 支持**多路 RTSP/USB** 摄像头同时接入，独立处理管线，共享检测模型 |
+| 摄像头自动发现 | 自动扫描子网内的 RTSP 摄像头，支持 Web 端手动添加/移除 |
 | Jetson NVDEC 硬解 | GStreamer 管线解码，降低 CPU 占用（可关闭回退软解） |
 | 人员检测 | 默认 **YOLO26n → TensorRT FP16**（NMS-free 端到端推理）；兼容 YOLOv5/v8/v11 ONNX |
 | 目标跟踪 | 质心跟踪（`CentroidTracker`），可配置距离与超时 |
-| 行为规则 | 区域入侵、越线、徘徊（支持浏览器交互绘制检测区域） |
-| Web 面板 | 静态页面 + WebSocket 低延迟视频流 + 实时配置推送 |
-| 事件记录 | `events.jsonl` + `output/events/` 截图，支持按日期筛选 |
-| HDMI 全屏显示 | 启动后自动全屏显示在 HDMI 连接的显示器上 |
+| 行为规则 | 区域入侵、越线、徘徊（支持浏览器交互绘制检测区域，**每摄像头独立配置**） |
+| Web 面板 | 静态页面 + WebSocket 低延迟视频流 + 实时配置推送，自适应网格布局 |
+| 事件持久化 | **SQLite 数据库**存储事件，支持按日期查询，重启不丢失，自动清理过期数据 |
+| 事件记录 | `events.jsonl` + `output/<cam-id>/events/` 截图，支持按日期筛选 |
+| HDMI 全屏显示 | 启动后自动检测 HDMI 并全屏显示，按 **F** 键切换全屏/窗口 |
+| 摄像头健康监控 | 自动检测离线摄像头并重连 |
 
 ***
 
 ## 系统架构
 
 ```
-RTSP ──► GStreamer NVDEC ──► AsyncCapture 线程读帧
-                                   │
-                                   ▼
-                      YOLO26 TensorRT FP16 推理
-                            (NMS-free, ~3.7ms)
-                                   │
-                                   ▼
-                         质心跟踪 + 规则引擎
-                                   │
-                   ┌───────────────┴───────────────┐
-                   ▼                               ▼
-           OpenCV 本地显示                    Web：HTTP + WS
-          (HDMI 自动全屏)                     (视频流 + 配置)
+RTSP-1 ──► GStreamer NVDEC ──► AsyncCapture ──┐
+RTSP-2 ──► GStreamer NVDEC ──► AsyncCapture ──┤
+  ...                                          │
+                                               ▼
+                              YOLO26 TensorRT FP16 推理
+                               (共享模型, 串行推理)
+                                    │
+                    ┌───────────────┼───────────────┐
+                    ▼               ▼               ▼
+              Pipeline-1      Pipeline-2       Pipeline-N
+              (跟踪+规则)     (跟踪+规则)      (跟踪+规则)
+                    │               │               │
+                    ▼               ▼               ▼
+              EventStore       EventStore       EventStore
+              (SQLite)         (SQLite)         (SQLite)
+                    │
+        ┌───────────┴───────────┐
+        ▼                       ▼
+  OpenCV 本地显示          Web：HTTP + WS
+ (HDMI 自动全屏,         (视频流 + 配置 +
+  F键切换全屏)           摄像头管理面板)
 ```
 
 ***
@@ -120,10 +136,13 @@ pip3 install --user numpy websockets
 ```
 Industrial-security-demo/
 ├── app/
-│   ├── behavior_demo.py         # 主程序：采集、检测、跟踪、规则、显示
+│   ├── behavior_demo.py         # 主程序：采集、检测、跟踪、规则、HDMI显示
+│   ├── multi_camera_manager.py  # 多摄像头管线管理、帧缓冲、事件存储
+│   ├── camera_discovery.py      # 摄像头自动发现与手动添加
+│   ├── event_store_db.py        # SQLite 事件持久化存储
 │   ├── yolo_trt_detector.py     # TensorRT / DNN 检测器（v5/v8/v11/v26 自动识别）
 │   ├── web_server.py            # 轻量 HTTP + MJPEG（stdlib）
-│   └── web_server_optimized.py  # 优化 WebSocket 视频 + 配置（需 websockets）
+│   └── web_server_optimized.py  # 优化 WebSocket 视频 + 配置 + 摄像头管理 API
 ├── config/
 │   └── demo_config.json         # 摄像头、检测器、规则、显示、Web 配置
 ├── models/
@@ -132,10 +151,13 @@ Industrial-security-demo/
 │   ├── yolov5n.onnx             # 可选 YOLOv5n
 │   └── yolov8n.onnx             # 可选 YOLOv8n
 ├── web/
-│   └── index.html               # Web 面板（区域绘制、WS 视频流）
+│   └── index.html               # Web 面板（多摄像头、区域绘制、WS 视频流）
 ├── output/
-│   ├── events.jsonl             # 事件日志
-│   └── events/                  # 事件截图
+│   ├── cam-0/                   # 摄像头0的事件数据
+│   │   ├── events.jsonl         # 事件日志
+│   │   ├── events.db            # SQLite 事件数据库
+│   │   └── events/              # 事件截图
+│   └── cam-1/                   # 摄像头1的事件数据
 ├── scripts/
 │   └── probe_camera.py          # RTSP 路径探测
 ├── build_yolov8_engine.py       # 可选 trtexec 构建脚本
@@ -224,12 +246,43 @@ python3 app/behavior_demo.py --no-window
 
 配置文件：`config/demo_config.json`
 
-### 摄像头 `camera`
+### 摄像头 `cameras`
 
 | 字段 | 含义 |
 |------|------|
-| `source` | RTSP URL 或摄像头索引 `"0"` |
-| `use_gstreamer` | `true` 使用 GStreamer NVDEC 硬解 |
+| `mode` | `manual`：手动配置；`auto`：自动扫描子网 |
+| `manual` | 手动摄像头列表，每项包含 `id`、`name`、`source`、`use_gstreamer`、`enabled` |
+| `auto_discover.subnet` | 自动扫描的子网，如 `192.168.3.0/24` |
+| `auto_discover.username` | RTSP 用户名 |
+| `auto_discover.password` | RTSP 密码 |
+| `auto_discover.rtsp_paths` | 尝试的 RTSP 路径列表 |
+| `auto_discover.scan_interval_seconds` | 扫描间隔（秒） |
+
+示例配置：
+
+```json
+"cameras": {
+  "mode": "manual",
+  "manual": [
+    {
+      "id": "cam-0",
+      "name": "poe-camera-1",
+      "source": "rtsp://admin:@192.168.3.10/Streaming/Channels/101",
+      "use_gstreamer": true,
+      "enabled": true
+    },
+    {
+      "id": "cam-1",
+      "name": "poe-camera-2",
+      "source": "rtsp://admin:@192.168.3.20/Streaming/Channels/101",
+      "use_gstreamer": true,
+      "enabled": true
+    }
+  ]
+}
+```
+
+> 也可通过 Web 端"添加摄像头"功能动态添加，无需修改配置文件。
 
 ### 检测器 `detector`
 
@@ -260,6 +313,107 @@ python3 app/behavior_demo.py --no-window
 }
 ```
 
+### 显示 `display`
+
+| 字段 | 含义 |
+|------|------|
+| `show_window` | 是否显示 OpenCV 本地窗口 |
+| `window_name` | 窗口标题 |
+| `resize_width` | 视频缩放宽度（像素） |
+| `web_jpeg_quality` | Web 端 JPEG 编码质量（1-100，默认 50，越低延迟越低） |
+
+***
+
+## 多摄像头管理
+
+### 架构设计
+
+每个摄像头运行独立的处理管线（`CameraPipeline`），包含：
+
+- **AsyncCapture**：独立线程读取视频帧
+- **CentroidTracker**：独立跟踪器
+- **EventStore**：独立事件存储（SQLite）
+- **FrameBuffer**：线程安全的帧缓冲
+
+所有摄像头共享一个 **TensorRT 检测模型**（`SharedDetector`），串行推理避免 GPU 竞争。
+
+### Web 端管理
+
+- **摄像头列表**：顶部标签页切换不同摄像头
+- **自适应布局**：1 摄像头全屏、2 摄像头左右分屏、3-4 摄像头 2×2 网格
+- **添加摄像头**：在控制面板中输入 IP、用户名、密码、RTSP 路径，点击"探测并添加"
+- **移除摄像头**：通过 API 移除指定摄像头
+- **独立区域配置**：每个摄像头有独立的检测区域，互不影响
+
+### 自动发现
+
+配置 `cameras.mode = "auto"` 后，系统会定期扫描子网内的 RTSP 摄像头，自动添加新发现的摄像头。
+
+### 健康监控
+
+每个摄像头管线内置健康检查：
+- 10 秒无帧 → 标记为离线
+- 自动尝试重连
+- Web 端显示摄像头在线/离线状态
+
+### 统计数据平滑
+
+系统对检测人数、追踪目标、FPS 等关键指标进行了双重平滑优化：
+
+**后端滑动窗口**（`StatsCollector`）：
+- 维护最近 5 次更新的历史记录队列
+- 每次更新时加入新值，移除最旧值
+- 返回队列平均值（FPS）或平均取整（检测数、追踪数）
+- 有效过滤瞬时波动，数据更稳定
+
+**前端动画过渡**（`pollStats`）：
+- 每次更新只移动 30% 的差值（`SMOOTH_FACTOR = 0.3`）
+- 数值变化小于 0.5 时直接显示目标值
+- 切换摄像头时重置平滑状态，避免显示旧数据
+
+**效果**：数值从突变跳动变为平滑渐变，Web 端和 HDMI 端均受益。
+
+***
+
+## HDMI 显示与全屏切换
+
+### 自动全屏
+
+启动时自动检测 HDMI 显示器连接状态（读取 `/sys/class/drm/card0-HDMI-A-1/status`），检测到 HDMI 时自动全屏显示。
+
+### 全屏/窗口切换
+
+在 HDMI 显示窗口中按 **F** 键可切换全屏和窗口模式：
+- **全屏模式**：适合监控大屏部署
+- **窗口模式**：适合开发调试
+
+### 多摄像头布局
+
+HDMI 显示自动适配摄像头数量：
+- 1 个摄像头：全屏显示
+- 2 个摄像头：左右分屏
+- 3-4 个摄像头：2×2 网格
+- 更多摄像头：3 列网格
+
+### 实时 HUD 信息
+
+每个摄像头画面上叠加显示实时状态信息：
+
+| 位置 | 内容 | 说明 |
+|------|------|------|
+| **左上角** | 🟢/🔴 状态指示灯 | 绿色=在线，红色=离线 |
+| **右上角** | 摄像头名称 | 如 `poe-camera-1`（绿色） |
+| **左侧** | FPS | 实时帧率（滑动窗口平滑） |
+| **左侧** | Tracks | 当前追踪目标数（平滑） |
+| **左侧** | Detections | 当前检测人数（平滑） |
+| **左侧** | Events | 累计事件数 |
+
+> 所有统计数据经过后端滑动窗口（最近 5 次）和前端动画过渡（30% 渐变）双重平滑处理，数值变化稳定无跳动。
+
+### 字体自适应
+
+所有 HUD 文字大小根据画面宽度动态计算，全屏和窗口模式下均清晰可读，最小字体保护避免负值报错。
+
 ***
 
 ## Web 端区域绘制
@@ -267,21 +421,57 @@ python3 app/behavior_demo.py --no-window
 ### 绘制检测区域
 
 1. 打开浏览器访问 `http://<Jetson的IP>:8080`
-2. 在右侧控制面板找到"检测区域"部分
-3. 点击"启用区域绘制"开关
-4. 在视频画面上点击鼠标左键绘制多边形顶点（至少 3 个点）
-5. 绘制完成后自动保存，或点击"完成绘制"/"取消"按钮
+2. 在顶部标签页选择要配置的摄像头
+3. 在右侧控制面板找到"检测区域"部分
+4. 点击"启用区域绘制"开关
+5. 在视频画面上点击鼠标左键绘制多边形顶点（至少 3 个点）
+6. 绘制完成后自动保存，或点击"完成绘制"/"取消"按钮
+
+> **重要**：每个摄像头的检测区域是独立的，切换摄像头时会自动加载该摄像头的区域配置。
 
 ### 管理检测区域
 
 - **查看区域列表**：已绘制的区域会显示在控制面板中
 - **删除单个区域**：点击区域旁边的 ✕ 按钮
-- **清空所有区域**：点击"清空所有区域"按钮
+- **清空所有区域**：点击"清空所有区域"按钮（仅清空当前摄像头的区域）
 
 ### 区域参数
 
 - **徘徊时间**：在"检测规则"中设置徘徊检测的时间阈值（秒）
 - **冷却时间**：同类事件的最小间隔时间（秒）
+
+***
+
+## 事件持久化与查询
+
+### SQLite 存储
+
+所有事件自动写入 SQLite 数据库（`output/<cam-id>/events.db`），支持：
+
+- **持久化**：应用重启后事件不丢失
+- **按日期查询**：通过 API 或 Web 端按日期筛选事件
+- **自动清理**：超过 30 天的事件自动清理
+- **双写机制**：同时写入内存环形缓冲区和 SQLite，查询优先使用 SQLite
+
+### 事件数据结构
+
+每个事件包含：
+
+| 字段 | 说明 |
+|------|------|
+| `timestamp` | 事件时间戳（`YYYYMMDD-HHMMSS` 格式） |
+| `camera_id` | 摄像头 ID（如 `cam-0`） |
+| `camera_name` | 摄像头名称（如 `poe-camera-1`） |
+| `event_type` | 事件类型：`zone_enter`、`loitering`、`line_cross` |
+| `track_id` | 目标跟踪 ID |
+| `zone_name` / `line_name` | 触发的区域/线名称 |
+| `dwell_seconds` | 徘徊时长（仅徘徊事件） |
+| `bbox` | 目标边界框 |
+| `centroid` | 目标质心坐标 |
+
+### 事件截图
+
+每个事件自动保存截图到 `output/<cam-id>/events/` 目录，最多保留 200 张，超出后自动清理最旧的截图。
 
 ***
 
@@ -344,16 +534,23 @@ model.export(format="onnx", imgsz=640)
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
-| `/api/stats` | GET | 实时统计（FPS、检测数、跟踪数、事件数） |
+| `/api/cameras` | GET | 摄像头列表（ID、名称、状态） |
+| `/api/cameras/<id>/stream` | GET | 指定摄像头的 MJPEG 视频流 |
+| `/api/cameras/<id>/stats` | GET | 指定摄像头的实时统计 |
+| `/api/cameras/<id>/events` | GET | 指定摄像头的事件列表 |
+| `/api/cameras/add` | POST | 添加摄像头（需 IP、用户名、密码等） |
+| `/api/cameras/remove` | POST | 移除摄像头（需 `camera_id`） |
+| `/api/cameras/discover` | GET | 触发摄像头自动发现 |
+| `/api/cameras/probe` | POST | 探测单个摄像头可达性 |
+| `/api/stats` | GET | 全局统计（汇总所有摄像头） |
 | `/api/events` | GET | 事件列表，支持 `?date=YYYYMMDD` 筛选 |
 | `/api/events/images` | GET | 事件截图列表，支持 `?date=YYYYMMDD` 筛选 |
-| `/api/events/img/<name>` | GET | 事件截图图片 |
+| `/api/events/img/<cam>/<name>` | GET | 事件截图图片 |
+| `/api/events/clear` | POST | 清空事件日志 |
 | `/api/config` | GET/POST | 读取/更新运行时配置 |
-| `/api/rules` | POST | 更新检测规则（区域、线等） |
+| `/api/rules` | POST | 更新检测规则（区域、线等），支持按摄像头配置 |
 | `/api/models` | GET | 可用模型列表 |
 | `/api/model/switch` | POST | 运行时切换模型 |
-| `/api/stream` | GET | MJPEG 视频流（HTTP 回退） |
-| `/api/events/clear` | POST | 清空事件日志 |
 
 WebSocket 端口：
 - `:8081` — 视频流（二进制 JPEG 帧）
@@ -365,11 +562,14 @@ WebSocket 端口：
 
 安装 `websockets` 后自动启用优化模式：
 
+- **多摄像头网格**：自适应 1/2/3 列布局，标签页切换
 - **双 WebSocket**：视频流与配置通道分离，互不阻塞
-- **动态 JPEG 质量**：浏览器滑块实时调节
-- **交互式区域绘制**：在视频上直接画多边形检测区域
+- **二进制帧协议**：视频帧使用二进制 WebSocket 传输，包含摄像头 ID 和时间戳
+- **动态 JPEG 质量**：配置 `web_jpeg_quality` 调节 Web 端画质
+- **交互式区域绘制**：在视频上直接画多边形检测区域，每摄像头独立配置
 - **功能开关**：浏览器中实时开关检测/跟踪/区域/越线/徘徊
-- **实时事件流**：带缩略图的事件列表，按日期筛选
+- **实时事件流**：带摄像头标签的事件列表，按日期筛选
+- **摄像头管理**：Web 端添加/移除摄像头，探测可达性
 - **自动重连**：WebSocket 断开后自动重连（指数退避）
 
 若 `websockets` 不可用，自动回退到 HTTP MJPEG 模式。
@@ -399,7 +599,11 @@ WebSocket 端口：
 | YOLO26 DNN 回退失败 | YOLO26 NMS-free 需要 TensorRT，不支持 OpenCV DNN 回退 |
 | 无画面 / DISPLAY | SSH 时用 `--no-window`，仅用 Web |
 | 区域/越线不触发 | 检查 `features` 中 `zone_detection`/`line_crossing` 开关 |
-| HDMI 窗口不全屏 | 检查 DISPLAY 环境变量，确保 X11 服务正常运行 |
+| HDMI 窗口不全屏 | 检查 DISPLAY 环境变量，确保 X11 服务正常运行；按 F 键手动切换全屏 |
+| Web 端卡顿 | 降低 `web_jpeg_quality`（默认 50），检查网络带宽 |
+| 事件不显示 | 检查是否已绘制检测区域并启用 `zone_detection`/`loitering` 功能 |
+| 摄像头离线 | 检查网络连接，系统会自动重连；查看 Web 端摄像头状态 |
+| 区域绘制影响其他摄像头 | 每个摄像头区域独立存储，切换摄像头时自动加载对应配置 |
 
 ***
 

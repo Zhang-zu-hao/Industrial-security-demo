@@ -12,11 +12,17 @@ import argparse
 import json
 import math
 import os
+import sys
 import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+
+os.environ.setdefault("QT_QPA_FONTDIR", "/usr/share/fonts/truetype/dejavu:/usr/share/fonts/truetype")
+os.environ.setdefault("OPENCV_LOG_LEVEL", "WARNING")
+os.environ.setdefault("OPENCV_VIDEOIO_DEBUG", "0")
+os.environ.setdefault("QT_LOGGING_RULES", "*.debug=false;qt.qpa.fonts=false")
 
 import cv2
 import numpy as np
@@ -82,11 +88,12 @@ class AsyncCapture:
 
     @staticmethod
     def _build_gst_pipeline(rtsp_url: str) -> str:
-        # Optimized GStreamer pipeline for maximum quality and performance
         return (
-            f"uridecodebin uri={rtsp_url} ! nvvidconv ! "
-            "video/x-raw,format=BGRx ! videoconvert ! "
-            "video/x-raw,format=BGR ! appsink drop=0 sync=0 max-buffers=1"
+            f"rtspsrc location=\"{rtsp_url}\" latency=0 protocols=tcp ! "
+            "rtph264depay ! h264parse ! nvv4l2decoder ! "
+            "nvvidconv ! video/x-raw,format=BGRx ! "
+            "videoconvert ! video/x-raw,format=BGR ! "
+            "appsink drop=1 sync=0 max-buffers=1"
         )
 
     def _open(self, source, use_gst: bool) -> cv2.VideoCapture:
@@ -223,17 +230,19 @@ class EventWriter:
         self.events_dir.mkdir(parents=True, exist_ok=True)
         self.log_path = output_dir / "events.jsonl"
         self.save_snapshots = save_snapshots
+        self._lock = threading.Lock()
         self._snap_count = len(list(self.events_dir.glob("*.jpg")))
 
     def write(self, event: Dict, frame: np.ndarray) -> None:
-        with self.log_path.open("a", encoding="utf-8") as fp:
-            fp.write(json.dumps(event, ensure_ascii=True) + "\n")
-        if self.save_snapshots:
-            if self._snap_count >= self.MAX_SNAPSHOTS:
-                self._cleanup_old()
-            name = f"{event['timestamp']}_{event['event_type']}_track{event['track_id']}.jpg"
-            cv2.imwrite(str(self.events_dir / name), frame)
-            self._snap_count += 1
+        with self._lock:
+            with self.log_path.open("a", encoding="utf-8") as fp:
+                fp.write(json.dumps(event, ensure_ascii=True) + "\n")
+            if self.save_snapshots:
+                if self._snap_count >= self.MAX_SNAPSHOTS:
+                    self._cleanup_old()
+                name = f"{event['timestamp']}_{event['event_type']}_track{event['track_id']}.jpg"
+                cv2.imwrite(str(self.events_dir / name), frame)
+                self._snap_count += 1
 
     def _cleanup_old(self) -> None:
         files = sorted(self.events_dir.glob("*.jpg"), key=lambda f: f.stat().st_mtime)
@@ -247,271 +256,245 @@ class EventWriter:
 
 
 # ---------------------------------------------------------------------------
-# Main demo
+# Main demo (multi-camera)
 # ---------------------------------------------------------------------------
 class BehaviorDemo:
     def __init__(self, config: Dict):
         self.config = config
-        self.detector = create_detector(config)
-        tc = config["tracker"]
-        self.tracker = CentroidTracker(float(tc.get("max_distance", 80)), float(tc.get("max_age_seconds", 1.5)))
-        self.output_dir = Path(config["output"]["root"]).resolve()
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-        self.event_writer = EventWriter(self.output_dir, bool(config["output"].get("save_snapshots", True)))
-        self.cooldown = float(config["rules"].get("event_cooldown_seconds", 8))
         self.show_window = bool(config["display"].get("show_window", True))
         self.window_name = config["display"].get("window_name", "BehaviorDemo")
-        self._web_fb = self._web_es = self._web_st = None
-        self._model_switch_request = None
-        self._model_switch_result = None
-        self._model_switch_event = threading.Event()
-        self._last_global_emit = 0.0
-        self.features = config.get("features", {
-            "human_detect": True,
-            "tracking": True,
-            "zone_detection": True,
-            "line_crossing": True,
-            "loitering": True
-        })
-        self.config.setdefault("features", dict(self.features))
+        self._manager = None
+        self._discovery_service = None
 
-    def enable_web(self) -> None:
+    def _get_camera_configs(self) -> List[Dict[str, Any]]:
+        cameras_cfg = self.config.get("cameras")
+        if cameras_cfg:
+            from camera_discovery import discover_cameras
+            return discover_cameras(self.config)
+        if "camera" in self.config:
+            cam = self.config["camera"]
+            return [{
+                "id": "cam-0",
+                "name": cam.get("name", "camera-1"),
+                "source": cam["source"],
+                "use_gstreamer": cam.get("use_gstreamer", True),
+                "enabled": True,
+            }]
+        return []
+
+    def _start_web(self) -> None:
         try:
-            from web_server_optimized import frame_buffer, event_store, stats, set_config_ref, set_demo_ref, start_server
-            self._web_fb, self._web_es, self._web_st = frame_buffer, event_store, stats
+            from web_server_optimized import (
+                set_config_ref,
+                set_manager_ref,
+                set_discovery_ref,
+                start_server,
+            )
             set_config_ref(self.config)
-            set_demo_ref(self)
-            stats.update_features(self.features)
+            set_manager_ref(self._manager)
+            if self._discovery_service:
+                set_discovery_ref(self._discovery_service)
             port = int(self.config.get("web", {}).get("port", 8080))
             ws_port = int(self.config.get("web", {}).get("ws_port", port + 1))
             config_ws_port = ws_port + 1
             start_server(port, ws_port, config_ws_port)
             print(f"[Web] HTTP:{port} WS:{ws_port} ConfigWS:{config_ws_port}")
         except ImportError:
-            from web_server import frame_buffer, event_store, stats, set_config_ref, start_server
-            self._web_fb, self._web_es, self._web_st = frame_buffer, event_store, stats
+            from web_server import set_config_ref, start_server
             set_config_ref(self.config)
             port = int(self.config.get("web", {}).get("port", 8080))
             start_server(port)
             print(f"[Web] HTTP:{port}")
 
-    def switch_model(self, onnx_file: str) -> dict:
-        """Request model switch and block until complete (thread-safe)."""
-        self._model_switch_result = None
-        self._model_switch_event.clear()
-        self._model_switch_request = onnx_file
-        if self._model_switch_event.wait(timeout=600):
-            return self._model_switch_result or {"status": "error", "error": "unknown"}
-        return {"status": "error", "error": "timeout"}
+    def run(self, override_source=None, max_frames=None, no_window=False, enable_web=False):
+        from multi_camera_manager import MultiCameraManager
 
-    @staticmethod
-    def list_models():
-        models_dir = Path(__file__).resolve().parent.parent / "models"
-        models = []
-        for f in sorted(models_dir.glob("*.onnx")):
-            engine = models_dir / (f.stem + "_fp16.engine")
-            models.append({
-                "name": f.stem,
-                "onnx_file": f.name,
-                "has_engine": engine.exists(),
-                "size_mb": round(f.stat().st_size / 1024 / 1024, 1)
-            })
-        return models
+        camera_configs = self._get_camera_configs()
+        if override_source:
+            camera_configs = [{
+                "id": "cam-0",
+                "name": "override",
+                "source": override_source,
+                "use_gstreamer": True,
+                "enabled": True,
+            }]
 
-    def _emit(self, frame, track, etype, meta=None):
-        now = time.time()
-        if now - track.fired_events.get(etype, 0.0) < self.cooldown:
+        if not camera_configs:
+            print("No cameras configured. Exiting.")
             return
-        if now - self._last_global_emit < 2.0:
-            return
-        track.fired_events[etype] = now
-        self._last_global_emit = now
-        ev = {"timestamp": now_ts(), "epoch_seconds": now,
-              "camera_name": self.config["camera"].get("name", "cam-1"),
-              "event_type": etype, "track_id": track.track_id,
-              "bbox": list(track.bbox), "centroid": list(track.centroid)}
-        if meta:
-            ev.update(meta)
-        self.event_writer.write(ev, frame)
-        if self._web_es:
-            self._web_es.add(ev)
-        # Update stats with event count
-        if self._web_st:
-            self._web_st.update_events(self._web_es.total)
 
-    def _draw_zones(self, frame, zones):
-        h, w = frame.shape[:2]
-        for z in zones:
-            pts = norm_px(z["points"], w, h)
-            col = tuple(z.get("color_bgr", [0, 255, 255]))
-            ov = frame.copy()
-            cv2.fillPoly(ov, [np.array(pts, np.int32)], col)
-            cv2.addWeighted(ov, 0.12, frame, 0.88, 0, frame)
-            cv2.polylines(frame, [np.array(pts, np.int32)], True, col, 2)
-            cv2.putText(frame, z["name"], pts[0], cv2.FONT_HERSHEY_SIMPLEX, 0.6, col, 2, cv2.LINE_AA)
+        print(f"Starting {len(camera_configs)} camera(s):")
+        for c in camera_configs:
+            print(f"  {c['id']}: {c['name']} -> {c['source']}")
 
-    def _draw_lines(self, frame, lines):
-        h, w = frame.shape[:2]
-        for lc in lines:
-            p1, p2 = norm_px([lc["start"]], w, h)[0], norm_px([lc["end"]], w, h)[0]
-            col = tuple(lc.get("color_bgr", [255, 0, 255]))
-            cv2.arrowedLine(frame, p1, p2, col, 2, tipLength=0.03)
-            cv2.putText(frame, lc["name"], p1, cv2.FONT_HERSHEY_SIMPLEX, 0.6, col, 2, cv2.LINE_AA)
+        self._manager = MultiCameraManager(self.config)
+        self._manager.start_all(camera_configs)
 
-    def _apply_rules(self, frame, track, zones, lines):
-        h, w = frame.shape[:2]
-        
-        # Zone detection (only if enabled)
-        if self.features.get("zone_detection", True):
-            for z in zones:
-                zn = z["name"]
-                pts = norm_px(z["points"], w, h)
-                inside = point_in_polygon(track.centroid, pts)
-                if inside and zn not in track.zone_entered_at:
-                    track.zone_entered_at[zn] = time.time()
-                    self._emit(frame, track, "zone_enter", {"zone_name": zn})
-                if not inside and zn in track.zone_entered_at:
-                    del track.zone_entered_at[zn]
-                if inside and self.features.get("loitering", True):
-                    dw = time.time() - track.zone_entered_at[zn]
-                    if dw >= float(z.get("dwell_seconds", 10)):
-                        self._emit(frame, track, "loitering", {"zone_name": zn, "dwell_seconds": round(dw, 2)})
-        
-        # Line crossing detection (only if enabled)
-        if self.features.get("line_crossing", True) and len(track.history) >= 2:
-            prev, curr = track.history[-2], track.history[-1]
-            for lc in lines:
-                p1, p2 = norm_px([lc["start"]], w, h)[0], norm_px([lc["end"]], w, h)[0]
-                if segments_intersect(prev, curr, p1, p2):
-                    self._emit(frame, track, "line_cross", {"line_name": lc["name"]})
+        if enable_web:
+            self._start_web()
 
-    def run(self, override_source=None, max_frames=None, no_window=False):
-        source = override_source or self.config["camera"]["source"]
-        use_gst = bool(self.config["camera"].get("use_gstreamer", True))
-        cap = AsyncCapture(source, use_gstreamer=use_gst)
-        resize_w = int(self.config["display"].get("resize_width", 640))
-        infer_interval = int(self.config["detector"].get("infer_interval", 1))
+        cameras_cfg = self.config.get("cameras", {})
+        if cameras_cfg.get("mode") == "auto":
+            from camera_discovery import CameraDiscoveryService
+            self._discovery_service = CameraDiscoveryService(self.config)
+            self._discovery_service.on_change(self._on_cameras_changed)
+            self._discovery_service.start()
+
         show = self.show_window and not no_window
-
         if show and not os.environ.get("DISPLAY"):
             print("DISPLAY not set; headless mode")
             show = False
+
+        fullscreen = False
         if show:
             try:
+                hdmi_status = Path("/sys/class/drm/card0-HDMI-A-1/status").read_text().strip()
+                if hdmi_status == "connected":
+                    fullscreen = True
+                    print("[Display] HDMI detected, starting in fullscreen")
+            except Exception:
+                pass
+            try:
                 cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
-                cv2.setWindowProperty(self.window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+                if fullscreen:
+                    cv2.setWindowProperty(self.window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
             except cv2.error:
                 show = False
 
+        resize_w = int(self.config["display"].get("resize_width", 640))
         frame_n = 0
-        t0 = time.time()
-        last_boxes: List[BBox] = []
-        fps_smooth = 0.0
-        last_conf_threshold = self.config["detector"].get("conf_threshold", 0.35)
 
-        while True:
-            frame = cap.read()
-            if frame is None:
-                time.sleep(0.005)
-                continue
+        try:
+            while True:
+                if show:
+                    pipelines = self._manager.get_all_pipelines()
+                    frames = []
+                    for cam_id, pipeline in pipelines.items():
+                        fb = pipeline.frame_buffer
+                        raw = fb.raw_frame
+                        if raw is not None:
+                            frames.append((cam_id, pipeline, raw.copy()))
 
-            if resize_w > 0 and frame.shape[1] > resize_w:
-                r = resize_w / frame.shape[1]
-                frame = cv2.resize(frame, (resize_w, int(frame.shape[0] * r)))
+                    if frames:
+                        display_frame = self._build_display_frame(frames, resize_w)
+                        cv2.imshow(self.window_name, display_frame)
+                        key = cv2.waitKey(1) & 0xFF
+                        if key in (27, ord("q")):
+                            break
+                        elif key == ord("f") or key == ord("F"):
+                            fullscreen = not fullscreen
+                            try:
+                                if fullscreen:
+                                    cv2.setWindowProperty(self.window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+                                else:
+                                    cv2.setWindowProperty(self.window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_NORMAL)
+                            except cv2.error:
+                                pass
+                    else:
+                        time.sleep(0.033)
 
-            zones = self.config["rules"].get("zones", [])
-            lines_cfg = self.config["rules"].get("lines", [])
-            self.cooldown = float(self.config["rules"].get("event_cooldown_seconds", 8))
-            self.features = self.config.get("features", self.features)
-
-            if self._model_switch_request:
-                onnx_file = self._model_switch_request
-                self._model_switch_request = None
-                try:
-                    self.config["detector"]["onnx_file"] = onnx_file
-                    self.detector = create_detector(self.config)
-                    last_boxes = []
-                    self._model_switch_result = {"status": "ok", "model": onnx_file}
-                    print(f"[Model] Switched to {onnx_file}")
-                except Exception as e:
-                    self._model_switch_result = {"status": "error", "error": str(e)}
-                    print(f"[Model] Switch failed: {e}")
-                finally:
-                    self._model_switch_event.set()
-
-            current_conf = self.config["detector"].get("conf_threshold", 0.35)
-            if abs(current_conf - last_conf_threshold) > 0.001:
-                if hasattr(self.detector, 'conf_threshold'):
-                    self.detector.conf_threshold = current_conf
-                    last_conf_threshold = current_conf
-
-            ts = time.time()
-            detect_enabled = self.features.get("human_detect", True)
-
-            if detect_enabled:
-                if frame_n % infer_interval == 0:
-                    last_boxes = self.detector.detect(frame)
-            else:
-                last_boxes = []
-
-            if detect_enabled and self.features.get("tracking", True):
-                tracks = self.tracker.update(last_boxes, ts)
-            else:
-                tracks = []
-                
-            frame_n += 1
-            elapsed = max(time.time() - t0, 1e-6)
-            fps_instant = frame_n / elapsed
-            fps_smooth = 0.9 * fps_smooth + 0.1 * fps_instant if fps_smooth > 0 else fps_instant
-
-            if detect_enabled:
-                self._draw_zones(frame, zones)
-                self._draw_lines(frame, lines_cfg)
-
-                tracking_on = self.features.get("tracking", True)
-
-                # Draw all bboxes FIRST so event snapshots include them
-                if tracking_on and tracks:
-                    for tr in tracks:
-                        x, y, w, h = tr.bbox
-                        cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 220, 0), 2)
-                        lbl = f"#{tr.track_id}"
-                        (tw, th), _ = cv2.getTextSize(lbl, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 2)
-                        cv2.rectangle(frame, (x, max(0, y - th - 8)), (x + tw + 6, y), (0, 220, 0), -1)
-                        cv2.putText(frame, lbl, (x + 3, max(th + 4, y - 4)),
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 2, cv2.LINE_AA)
-                else:
-                    for box in last_boxes:
-                        x, y, w, h = box
-                        cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 180, 255), 2)
-
-                # Apply rules AFTER drawing so snapshots contain annotations
-                if tracking_on and tracks:
-                    check_rules = (self.features.get("zone_detection", False) or
-                                   self.features.get("line_crossing", False) or
-                                   self.features.get("loitering", False))
-                    if check_rules:
-                        for tr in tracks:
-                            self._apply_rules(frame, tr, zones, lines_cfg)
-
-            if self._web_fb:
-                quality = self.config.get("display", {}).get("jpeg_quality", 85)
-                self._web_fb.update(frame, quality=quality)
-            if self._web_st:
-                self._web_st.update(fps_smooth, len(last_boxes), len(tracks), infer_interval)
-
-            if show:
-                cv2.imshow(self.window_name, frame)
-                if cv2.waitKey(1) & 0xFF in (27, ord("q")):
+                frame_n += 1
+                if max_frames and frame_n >= max_frames:
                     break
 
-            if max_frames and frame_n >= max_frames:
-                print(f"frames={frame_n} fps={fps_smooth:.1f} source={source}")
-                break
+        except KeyboardInterrupt:
+            pass
+        finally:
+            self._manager.stop_all()
+            if self._discovery_service:
+                self._discovery_service.stop()
+            if show:
+                cv2.destroyAllWindows()
 
-        cap.release()
-        if show:
-            cv2.destroyAllWindows()
+    def _build_display_frame(self, frames: List[tuple], resize_w: int) -> np.ndarray:
+        n = len(frames)
+        if n == 0:
+            return np.zeros((480, 640, 3), dtype=np.uint8)
+
+        cols = 1 if n == 1 else 2 if n <= 4 else 3
+        target_w = max(resize_w // cols, 320)
+
+        resized = []
+        for cam_id, pipeline, frame in frames:
+            h, w = frame.shape[:2]
+            r = target_w / max(w, 1)
+            new_h = max(1, int(h * r))
+            f = cv2.resize(frame, (target_w, new_h))
+            f = self._draw_hud(f, cam_id, pipeline)
+            resized.append(f)
+
+        if n == 1:
+            return resized[0]
+
+        cell_h = max(f.shape[0] for f in resized)
+        cell_w = max(f.shape[1] for f in resized)
+        rows = (n + cols - 1) // cols
+
+        canvas = np.zeros((cell_h * rows, cell_w * cols, 3), dtype=np.uint8)
+        for i, f in enumerate(resized):
+            r_idx = i // cols
+            c_idx = i % cols
+            y1 = r_idx * cell_h
+            x1 = c_idx * cell_w
+            fh, fw = f.shape[:2]
+            canvas[y1:y1 + fh, x1:x1 + fw] = f
+
+        return canvas
+
+    @staticmethod
+    def _draw_hud(frame: np.ndarray, cam_id: str, pipeline) -> np.ndarray:
+        fh, fw = frame.shape[:2]
+        fs = max(0.35, 0.5 * fw / 960)
+        thick = max(1, int(fs * 2))
+        pad = max(6, int(fs * 14))
+        line_h = max(14, int(fs * 28))
+        indent = pad + max(10, int(fs * 20))
+
+        cam_name = pipeline.cam_name
+        stats = pipeline.stats.snapshot(
+            total_events=pipeline.event_store.total,
+            current_model="",
+        )
+        online = pipeline.is_healthy()
+        fps = stats.get("fps", 0.0)
+        tracks = stats.get("tracks", 0)
+        detections = stats.get("detections", 0)
+        total_events = stats.get("total_events", 0)
+
+        status_color = (0, 220, 100) if online else (0, 0, 220)
+        cv2.circle(frame, (pad, pad + line_h // 2), max(4, int(fs * 8)), status_color, -1, cv2.LINE_AA)
+
+        (tw, _), _ = cv2.getTextSize(cam_name, cv2.FONT_HERSHEY_SIMPLEX, fs, thick)
+        cv2.putText(frame, cam_name, (fw - tw - pad, pad + line_h - 4),
+                    cv2.FONT_HERSHEY_SIMPLEX, fs, (0, 255, 0), thick, cv2.LINE_AA)
+
+        y = pad + line_h * 2
+        cv2.putText(frame, f"FPS: {fps:.1f}", (indent, y),
+                    cv2.FONT_HERSHEY_SIMPLEX, fs, (200, 200, 200), thick, cv2.LINE_AA)
+        y += line_h
+        cv2.putText(frame, f"Tracks: {tracks}", (indent, y),
+                    cv2.FONT_HERSHEY_SIMPLEX, fs, (180, 130, 255), thick, cv2.LINE_AA)
+        y += line_h
+        cv2.putText(frame, f"Detections: {detections}", (indent, y),
+                    cv2.FONT_HERSHEY_SIMPLEX, fs, (200, 180, 100), thick, cv2.LINE_AA)
+        y += line_h
+        cv2.putText(frame, f"Events: {total_events}", (indent, y),
+                    cv2.FONT_HERSHEY_SIMPLEX, fs, (100, 200, 255), thick, cv2.LINE_AA)
+
+        return frame
+
+    def _on_cameras_changed(self, new_cameras: List[Dict]) -> None:
+        current_ids = set(self._manager.get_all_pipelines().keys())
+        new_ids = {c["id"] for c in new_cameras}
+
+        for cam_id in current_ids - new_ids:
+            self._manager.remove_camera(cam_id)
+            print(f"[Demo] Removed camera: {cam_id}")
+
+        for cam in new_cameras:
+            if cam["id"] not in current_ids:
+                self._manager.add_camera(cam)
+                print(f"[Demo] Added camera: {cam['id']} ({cam['name']})")
 
 
 def parse_args():
@@ -532,9 +515,8 @@ def main():
     if args.web_port is not None:
         config.setdefault("web", {})["port"] = args.web_port
     demo = BehaviorDemo(config)
-    if not args.no_web:
-        demo.enable_web()
-    demo.run(args.source, max_frames=args.max_frames, no_window=args.no_window)
+    demo.run(args.source, max_frames=args.max_frames, no_window=args.no_window,
+             enable_web=not args.no_web)
 
 
 if __name__ == "__main__":

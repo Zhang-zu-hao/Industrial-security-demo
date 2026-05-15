@@ -91,7 +91,6 @@ body {
   overflow: hidden;
 }
 .metric::before { content: ''; position: absolute; top: 0; left: 0; width: 3px; height: 100%; }
-.metric.m-fps::before { background: var(--accent); }
 .metric.m-det::before { background: var(--blue); }
 .metric.m-trk::before { background: var(--purple); }
 .metric.m-evt::before { background: var(--warn); }
@@ -99,7 +98,6 @@ body {
 .metric.m-model::before { background: var(--danger); }
 .m-label { font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 1.2px; color: var(--text2); margin-bottom: 4px; }
 .m-val { font-family: var(--mono); font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.m-fps .m-val { color: var(--accent); }
 .m-det .m-val { color: var(--blue); }
 .m-trk .m-val { color: var(--purple); }
 .m-evt .m-val { color: var(--warn); }
@@ -122,25 +120,58 @@ body {
   font-size: 12px; font-weight: 600;
 }
 .panel-head .sub { color: var(--text2); font-weight: 400; }
-.video-container {
+
+.camera-grid {
   flex: 1;
+  display: grid;
+  gap: 4px;
+  padding: 4px;
   background: #000;
+  min-height: 0;
+}
+.camera-grid.cols-1 { grid-template-columns: 1fr; }
+.camera-grid.cols-2 { grid-template-columns: 1fr 1fr; }
+.camera-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+
+.camera-cell {
   position: relative;
+  background: #000;
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: border-color 0.2s;
 }
-#stream { width: 100%; height: 100%; object-fit: contain; }
-.video-status {
+.camera-cell:hover { border-color: var(--text2); }
+.camera-cell.active { border-color: var(--accent); }
+.camera-cell img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.camera-cell .cam-label {
   position: absolute;
-  top: 10px;
-  left: 10px;
+  top: 6px;
+  left: 6px;
   background: rgba(0,0,0,0.7);
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 10px;
   font-family: var(--mono);
+  color: var(--accent);
 }
+.camera-cell .cam-status {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.camera-cell .cam-status.off { background: var(--danger); }
 
 .draw-toolbar {
   position: absolute;
@@ -191,13 +222,34 @@ body {
   min-height: 0;
 }
 
+.camera-tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.camera-tab {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text2);
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.camera-tab:hover { border-color: var(--text2); color: var(--text); }
+.camera-tab.active { background: var(--accent); color: #000; border-color: var(--accent); }
+
 .events-section,
 .snaps-section,
 .model-section,
 .control-section,
 .feature-section,
 .rules-section,
-.btn-row-section {
+.btn-row-section,
+.add-camera-section {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -247,6 +299,7 @@ body {
 .evt-main { color: var(--text); font-weight: 500; }
 .evt-sub { color: var(--text2); font-family: var(--mono); font-size: 10px; }
 .evt-time { color: var(--text2); font-family: var(--mono); font-size: 10px; white-space: nowrap; }
+.evt-cam { color: var(--blue); font-size: 9px; }
 
 .ctrl-grid {
   display: grid;
@@ -343,7 +396,7 @@ body {
   cursor: pointer;
   transition: all 0.2s;
 }
-.btn-sm { padding: 7px 14px; flex: 0; }
+.btn-sm { padding: 7px 14px; flex: 0; white-space: nowrap; }
 .btn-primary { background: var(--accent); color: #000; }
 .btn-primary:hover { filter: brightness(1.15); }
 .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text2); }
@@ -445,6 +498,38 @@ body {
 .toast.show { transform: translateY(0); opacity: 1; }
 .toast.error { border-color: var(--danger); color: var(--danger); }
 .toast.info { border-color: var(--blue); color: var(--blue); }
+
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+  z-index: 500; display: flex; align-items: center; justify-content: center;
+}
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  width: 420px;
+  max-width: 90vw;
+}
+.modal h3 { font-size: 16px; margin-bottom: 16px; color: var(--text); }
+.modal .form-group { margin-bottom: 12px; }
+.modal .form-group label { display: block; font-size: 11px; color: var(--text2); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.8px; }
+.modal .form-group input, .modal .form-group select {
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  outline: none;
+}
+.modal .form-group input:focus { border-color: var(--accent); }
+.modal .btn-row { margin-top: 16px; }
+.modal .status-msg { font-size: 11px; margin-top: 8px; min-height: 16px; }
+.modal .status-msg.ok { color: var(--accent); }
+.modal .status-msg.err { color: var(--danger); }
 </style>
 </head>
 <body>
@@ -497,16 +582,9 @@ body {
   <div class="video-wrap">
     <div class="panel-head">
       <span data-zh="实时监控" data-en="Live View">实时监控</span>
-      <span class="sub" id="camName">--</span>
+      <span class="sub" id="camCount">0</span>
     </div>
-    <div class="video-container">
-      <img id="stream" alt="live">
-      <canvas id="drawCanvas" style="position:absolute; top:0; left:0; width:100%; height:100%; cursor:crosshair; display:none;"></canvas>
-      <div class="video-status" id="videoStatus">MJPEG</div>
-      <div class="draw-toolbar" id="drawToolbar" style="display:none;">
-        <button class="btn-sm btn-primary" onclick="finishDrawing()" data-zh="完成绘制" data-en="Finish">完成绘制</button>
-        <button class="btn-sm btn-ghost" onclick="cancelDrawing()" data-zh="取消" data-en="Cancel">取消</button>
-      </div>
+    <div class="camera-grid cols-1" id="cameraGrid">
     </div>
   </div>
 
@@ -515,7 +593,8 @@ body {
       <span data-zh="控制面板" data-en="Control Panel">控制面板</span>
     </div>
     <div class="right-col-content">
-      <!-- Events section -->
+      <div class="camera-tabs" id="cameraTabs"></div>
+
       <div class="events-section">
         <div class="events-wrap">
           <div class="panel-head">
@@ -530,7 +609,6 @@ body {
         </div>
       </div>
 
-      <!-- Snapshots section -->
       <div class="snaps-section">
         <div class="panel-head" style="padding: 0; margin-bottom: 8px;">
           <span data-zh="事件截图" data-en="Snapshots">事件截图</span>
@@ -541,25 +619,21 @@ body {
         </div>
       </div>
 
-      <!-- Model selection -->
       <div class="model-section">
         <div class="panel-head" style="padding: 0; margin-bottom: 8px;"><span data-zh="模型选择" data-en="Model Selection">模型选择</span></div>
         <div class="model-list" id="modelList"></div>
       </div>
 
-      <!-- Detection control -->
       <div class="control-section">
         <div class="panel-head" style="padding: 0; margin-bottom: 8px;"><span data-zh="检测控制" data-en="Detection Control">检测控制</span></div>
         <button id="btnDetect" class="btn-detect on" onclick="toggleDetect()">⏹ 停止检测</button>
       </div>
 
-      <!-- Feature toggles -->
       <div class="feature-section">
         <div class="panel-head" style="padding: 0; margin-bottom: 8px;"><span data-zh="功能开关" data-en="Feature Toggles">功能开关</span></div>
         <div class="feature-grid" id="featureGrid"></div>
       </div>
 
-      <!-- Zone management -->
       <div class="rules-section">
         <div class="panel-head" style="padding: 0; margin-bottom: 8px;"><span data-zh="检测区域" data-en="Detection Zones">检测区域</span></div>
         <div class="zone-controls">
@@ -576,7 +650,6 @@ body {
         </div>
       </div>
 
-      <!-- Detection rules -->
       <div class="rules-section">
         <div class="panel-head" style="padding: 0; margin-bottom: 8px;"><span data-zh="检测规则" data-en="Detection Rules">检测规则</span></div>
         <div class="ctrl-grid">
@@ -595,7 +668,37 @@ body {
         </div>
       </div>
 
-      <!-- Action buttons -->
+      <div class="add-camera-section">
+        <div class="panel-head" style="padding: 0; margin-bottom: 8px;"><span data-zh="添加摄像头" data-en="Add Camera">添加摄像头</span></div>
+        <div class="ctrl-grid">
+          <div class="ctrl-field">
+            <span class="ctrl-lbl">IP 地址</span>
+            <input class="ctrl-inp" type="text" id="addCamIP" placeholder="192.168.3.x">
+          </div>
+          <div class="ctrl-field">
+            <span class="ctrl-lbl">摄像头名称</span>
+            <input class="ctrl-inp" type="text" id="addCamName" placeholder="camera-name">
+          </div>
+          <div class="ctrl-field">
+            <span class="ctrl-lbl">用户名</span>
+            <input class="ctrl-inp" type="text" id="addCamUser" value="admin">
+          </div>
+          <div class="ctrl-field">
+            <span class="ctrl-lbl">密码</span>
+            <input class="ctrl-inp" type="text" id="addCamPass" value="">
+          </div>
+          <div class="ctrl-field full">
+            <span class="ctrl-lbl">RTSP 路径</span>
+            <input class="ctrl-inp" type="text" id="addCamPath" value="/Streaming/Channels/101">
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="probeAndAddCamera()" data-zh="探测并添加" data-en="Probe & Add">探测并添加</button>
+          <button class="btn btn-ghost" onclick="probeCamera()" data-zh="仅探测" data-en="Probe Only">仅探测</button>
+        </div>
+        <div id="addCamStatus" style="font-size:11px; margin-top:6px; min-height:16px;"></div>
+      </div>
+
       <div class="btn-row-section">
         <div class="btn-row">
           <button class="btn btn-primary" onclick="applyConfig()" data-zh="应用配置" data-en="Apply">应用配置</button>
@@ -620,6 +723,10 @@ const MAX_RECONNECT = 10;
 const wsVideoUrl = `ws://${location.hostname}:8081`;
 const wsConfigUrl = `ws://${location.hostname}:8082`;
 
+let cameraList = [];
+let activeCamId = null;
+let cameraStreams = {};
+
 const FEATURES = [
   { key: 'human_detect', zh: '人形检测', en: 'Human Detect' },
   { key: 'tracking',     zh: '目标跟踪', en: 'Tracking' },
@@ -638,7 +745,6 @@ const EVENT_LABELS = {
 
 function pad(n) { return n < 10 ? '0' + n : n; }
 
-/** Backend event timestamp: YYYYMMDD-HHMMSS → readable parts */
 function formatEvtDisplay(ts) {
   if (!ts || ts.length < 15) return { sub: ts || '--', short: '' };
   const datePart = ts.slice(0, 8);
@@ -650,10 +756,6 @@ function formatEvtDisplay(ts) {
   }
   return { sub: ts, short: ts.slice(-8) };
 }
-
-let serverClockUnix = null;
-let serverClockPerfAt = null;
-let serverTzIana = 'UTC';
 
 function fmtUp(s) {
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = Math.floor(s % 60);
@@ -683,20 +785,9 @@ function switchLang(lang) {
 
 function updateClock() {
   const el = $('clock');
-  // 使用系统当前时间，确保与摄像头时间同步
   const now = new Date();
   const locale = currentLang === 'zh' ? 'zh-CN' : 'en-US';
-  
-  // 格式化时间为：星期 月/日 时：分：秒
-  const options = {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false
-  };
-  
+  const options = { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
   const formatter = new Intl.DateTimeFormat(locale, options);
   const parts = formatter.formatToParts(now);
   const month = parts.find(p => p.type === 'month').value;
@@ -704,10 +795,7 @@ function updateClock() {
   const hour = parts.find(p => p.type === 'hour').value;
   const minute = parts.find(p => p.type === 'minute').value;
   const second = parts.find(p => p.type === 'second').value;
-  
-  // 获取星期
   const weekday = now.toLocaleDateString(locale, { weekday: 'short' });
-  
   el.textContent = `${weekday} ${month}/${day} ${hour}:${minute}:${second}`;
   el.title = '系统时间';
 }
@@ -717,7 +805,6 @@ function modelDisplayName(onnx) {
   return onnx.replace('.onnx', '').replace('yolov', 'YOLOv').replace('yolo', 'YOLO');
 }
 
-// --- Feature toggles ---
 function buildFeatureGrid() {
   const grid = $('featureGrid');
   grid.innerHTML = FEATURES.map(f => {
@@ -737,7 +824,6 @@ function onFeatureClick(key) {
   sendConfig();
 }
 
-// --- Detection toggle ---
 function toggleDetect() {
   detectActive = !detectActive;
   FEATURES.forEach(f => featureFlags[f.key] = detectActive);
@@ -757,7 +843,6 @@ function updateDetectBtn() {
     : (currentLang === 'zh' ? '▶ 开始检测' : '▶ Start Detection');
 }
 
-// --- Model switching ---
 let availableModels = [];
 let currentModelFile = '';
 let switchingModel = false;
@@ -822,130 +907,128 @@ async function selectModel(onnx) {
   }
 }
 
-// --- Zone Drawing ---
 let zoneDrawingMode = false;
 let drawPoints = [];
 let customZones = [];
+let cameraZones = {};
 let zoneCounter = 1;
+let zoneCanvas = null;
+let zoneCtx = null;
 
-function toggleZoneDrawing() {
-  zoneDrawingMode = !zoneDrawingMode;
-  const canvas = $('drawCanvas');
-  const toolbar = $('drawToolbar');
-  const checkbox = $('zoneToggleCheckbox');
-  
-  if (zoneDrawingMode) {
-    canvas.style.display = 'block';
-    toolbar.style.display = 'flex';
-    checkbox.checked = true;
-    $('zoneToggle').classList.add('active');
-    initDrawCanvas();
-  } else {
-    canvas.style.display = 'none';
-    toolbar.style.display = 'none';
-    checkbox.checked = false;
-    $('zoneToggle').classList.remove('active');
-    drawPoints = [];
+function setupZoneCanvas() {
+  if (!activeCamId) return;
+  const cell = document.getElementById(`cell-${activeCamId}`);
+  if (!cell) return;
+
+  let canvas = cell.querySelector('.zone-canvas');
+  if (!canvas) {
+    canvas = document.createElement('canvas');
+    canvas.className = 'zone-canvas';
+    canvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;z-index:10;cursor:crosshair;';
+    cell.appendChild(canvas);
   }
-}
+  zoneCanvas = canvas;
+  zoneCtx = canvas.getContext('2d');
 
-function initDrawCanvas() {
-  const canvas = $('drawCanvas');
-  const container = canvas.parentElement;
-  canvas.width = container.offsetWidth;
-  canvas.height = container.offsetHeight;
-  
-  canvas.onmousedown = function(e) {
-    const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
+  const rect = cell.getBoundingClientRect();
+  canvas.width = rect.width;
+  canvas.height = rect.height;
+
+  canvas.onclick = function(e) {
+    if (!zoneDrawingMode) return;
+    e.stopPropagation();
+    const x = e.offsetX / canvas.width;
+    const y = e.offsetY / canvas.height;
     drawPoints.push([x, y]);
+    redrawZoneCanvas();
   };
-  
+
   canvas.onmousemove = function(e) {
-    if (drawPoints.length === 0) return;
-    drawPreview();
+    if (!zoneDrawingMode || drawPoints.length === 0) return;
+    redrawZoneCanvas(e.offsetX / canvas.width, e.offsetY / canvas.height);
   };
+
+  redrawZoneCanvas();
 }
 
-function drawPreview() {
-  const canvas = $('drawCanvas');
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  
+function redrawZoneCanvas(mx, my) {
+  if (!zoneCtx || !zoneCanvas) return;
+  const w = zoneCanvas.width, h = zoneCanvas.height;
+  zoneCtx.clearRect(0, 0, w, h);
+
   if (drawPoints.length === 0) return;
-  
-  ctx.beginPath();
-  ctx.strokeStyle = '#22d3a7';
-  ctx.lineWidth = 2;
-  ctx.fillStyle = 'rgba(34, 211, 167, 0.15)';
-  
-  const pts = drawPoints.map(p => [p[0] * canvas.width, p[1] * canvas.height]);
-  ctx.moveTo(pts[0][0], pts[0][1]);
-  for (let i = 1; i < pts.length; i++) {
-    ctx.lineTo(pts[i][0], pts[i][1]);
+
+  zoneCtx.strokeStyle = '#22d3a7';
+  zoneCtx.fillStyle = 'rgba(34,211,167,0.15)';
+  zoneCtx.lineWidth = 2;
+  zoneCtx.beginPath();
+  zoneCtx.moveTo(drawPoints[0][0] * w, drawPoints[0][1] * h);
+  for (let i = 1; i < drawPoints.length; i++) {
+    zoneCtx.lineTo(drawPoints[i][0] * w, drawPoints[i][1] * h);
   }
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-  
-  // Draw points
-  pts.forEach(p => {
-    ctx.beginPath();
-    ctx.arc(p[0], p[1], 4, 0, Math.PI * 2);
-    ctx.fillStyle = '#22d3a7';
-    ctx.fill();
+  if (mx !== undefined && my !== undefined) {
+    zoneCtx.lineTo(mx * w, my * h);
+  }
+  if (drawPoints.length >= 3) {
+    zoneCtx.closePath();
+    zoneCtx.fill();
+  }
+  zoneCtx.stroke();
+
+  drawPoints.forEach(([px, py]) => {
+    zoneCtx.fillStyle = '#22d3a7';
+    zoneCtx.beginPath();
+    zoneCtx.arc(px * w, py * h, 4, 0, Math.PI * 2);
+    zoneCtx.fill();
   });
 }
 
-function finishDrawing() {
+function removeZoneCanvas() {
+  if (zoneCanvas) {
+    zoneCanvas.remove();
+    zoneCanvas = null;
+    zoneCtx = null;
+  }
+}
+
+function finalizeZone() {
   if (drawPoints.length < 3) {
-    toast(t('至少需要3个点', 'Need at least 3 points'), 'error');
+    toast(t('至少需要3个点来定义区域', 'Need at least 3 points for a zone'), 'error');
     return;
   }
-  
-  const zoneName = `zone_${zoneCounter++}`;
   const zone = {
-    name: zoneName,
+    name: `zone_${zoneCounter++}`,
     dwell_seconds: parseFloat($('inDwell').value) || 10,
     color_bgr: [0, 255, 255],
-    points: [...drawPoints]
+    points: drawPoints.map(p => [Math.round(p[0] * 1000) / 1000, Math.round(p[1] * 1000) / 1000])
   };
-  
   customZones.push(zone);
   drawPoints = [];
-  
-  // Clear canvas
-  const canvas = $('drawCanvas');
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  
-  // Update UI
   renderZoneList();
   sendZonesToServer();
-  toast(t('区域已添加', 'Zone added'));
+  toast(t(`区域 "${zone.name}" 已添加`, `Zone "${zone.name}" added`));
+  redrawZoneCanvas();
 }
 
-function cancelDrawing() {
-  drawPoints = [];
-  const canvas = $('drawCanvas');
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-}
-
-function renderZoneList() {
-  const list = $('zoneList');
-  if (customZones.length === 0) {
-    list.innerHTML = `<div style="font-size:11px; color:var(--text2); padding:8px;">${t('暂无自定义区域', 'No custom zones')}</div>`;
-    return;
+function toggleZoneDrawing() {
+  zoneDrawingMode = !zoneDrawingMode;
+  const checkbox = $('zoneToggleCheckbox');
+  if (zoneDrawingMode) {
+    checkbox.checked = true;
+    $('zoneToggle').classList.add('active');
+    drawPoints = [];
+    setupZoneCanvas();
+    toast(t('点击视频画面绘制区域，完成后再次点击此按钮', 'Click video to draw zone, click again to finish'), 'info');
+  } else {
+    checkbox.checked = false;
+    $('zoneToggle').classList.remove('active');
+    if (drawPoints.length >= 3) {
+      finalizeZone();
+    } else {
+      drawPoints = [];
+    }
+    removeZoneCanvas();
   }
-  
-  list.innerHTML = customZones.map((z, i) => `
-    <div class="zone-item">
-      <span class="zone-name">${z.name}</span>
-      <button class="zone-delete" onclick="deleteZone(${i})">✕</button>
-    </div>
-  `).join('');
 }
 
 function deleteZone(index) {
@@ -957,18 +1040,35 @@ function deleteZone(index) {
 
 function clearAllZones() {
   customZones = [];
+  drawPoints = [];
+  removeZoneCanvas();
   renderZoneList();
   sendZonesToServer();
   toast(t('所有区域已清空', 'All zones cleared'), 'info');
 }
 
+function renderZoneList() {
+  const list = $('zoneList');
+  if (customZones.length === 0) {
+    list.innerHTML = `<div style="font-size:11px; color:var(--text2); padding:8px;">${t('暂无自定义区域', 'No custom zones')}</div>`;
+    return;
+  }
+  list.innerHTML = customZones.map((z, i) => `
+    <div class="zone-item">
+      <span class="zone-name">${z.name}</span>
+      <button class="zone-delete" onclick="deleteZone(${i})">✕</button>
+    </div>
+  `).join('');
+}
+
 function sendZonesToServer() {
+  if (!activeCamId) return;
   const body = {
     zones: customZones,
     lines: [],
-    event_cooldown_seconds: parseFloat($('inCooldown').value) || 8
+    event_cooldown_seconds: parseFloat($('inCooldown').value) || 8,
+    camera_id: activeCamId
   };
-  
   fetch('/api/rules', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -976,20 +1076,20 @@ function sendZonesToServer() {
   }).catch(e => console.error('Failed to send zones:', e));
 }
 
-// --- Config ---
 async function sendConfig() {
+  const rules = {
+    event_cooldown_seconds: parseFloat($('inCooldown').value) || 8,
+    lines: [],
+    zones: []
+  };
+  if (activeCamId && customZones.length > 0) {
+    rules.camera_zones = { [activeCamId]: { zones: customZones, lines: [] } };
+  } else if (customZones.length > 0) {
+    rules.zones = customZones;
+  }
   const body = {
     features: featureFlags,
-    rules: {
-      event_cooldown_seconds: parseFloat($('inCooldown').value) || 8,
-      zones: customZones.length > 0 ? customZones : [{
-        name: 'restricted_area',
-        dwell_seconds: parseFloat($('inDwell').value) || 10,
-        color_bgr: [0, 255, 255],
-        points: [[0.6, 0.22], [0.94, 0.22], [0.94, 0.88], [0.6, 0.88]]
-      }],
-      lines: []
-    },
+    rules: rules,
     detector: {
       conf_threshold: parseFloat($('inConf').value) || 0.35
     }
@@ -1016,11 +1116,11 @@ function clearEvents() {
   $('evtList').innerHTML = '';
   $('evtCount').textContent = '0';
   $('vEvt').textContent = '0';
-  fetch('/api/events/clear', { method: 'POST' });
+  const body = activeCamId ? JSON.stringify({ camera_id: activeCamId }) : '{}';
+  fetch('/api/events/clear', { method: 'POST', headers: {'Content-Type': 'application/json'}, body });
   toast(t('日志已清空', 'Log cleared'), 'info');
 }
 
-// --- Connection ---
 function setConnStatus(status) {
   const dot = $('connDot');
   dot.className = 'conn-dot' + (status === 'off' ? ' off' : status === 'connecting' ? ' connecting' : '');
@@ -1028,17 +1128,9 @@ function setConnStatus(status) {
 
 function connectWebSocket() {
   if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
-  
-  if (wsVideo && wsVideo.readyState === WebSocket.OPEN) {
-    return;
-  }
-  
-  if (wsVideo) {
-    wsVideo.onclose = null;
-    wsVideo.close();
-    wsVideo = null;
-  }
-  
+  if (wsVideo && wsVideo.readyState === WebSocket.OPEN) return;
+  if (wsVideo) { wsVideo.onclose = null; wsVideo.close(); wsVideo = null; }
+
   setConnStatus('connecting');
   $('connText').textContent = t('连接中...', 'Connecting...');
 
@@ -1051,25 +1143,46 @@ function connectWebSocket() {
       streamMode = 'ws';
       setConnStatus('on');
       $('connText').textContent = 'WebSocket';
-      $('videoStatus').textContent = 'WS';
     };
 
     wsVideo.onmessage = function(event) {
-      if (event.data instanceof ArrayBuffer && event.data.byteLength > 0) {
-        const blob = new Blob([event.data], { type: 'image/jpeg' });
-        const url = URL.createObjectURL(blob);
-        const img = $('stream');
-        const old = img.src;
-        img.src = url;
-        if (old && old.startsWith('blob:')) URL.revokeObjectURL(old);
+      if (typeof event.data === 'string') {
+        // JSON handshake or control message
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'handshake') {
+            console.log('WS protocol v' + (msg.proto || 1));
+          }
+        } catch(e) {}
+        return;
+      }
+      if (event.data instanceof ArrayBuffer && event.data.byteLength > 12) {
+        const view = new DataView(event.data);
+        // Binary protocol v2: [4B cam_id_len][cam_id][8B ts][frame_data]
+        const camIdLen = view.getUint32(0);
+        if (camIdLen > 0 && camIdLen < 256 && 4 + camIdLen + 8 < event.data.byteLength) {
+          const camIdBytes = new Uint8Array(event.data.slice(4, 4 + camIdLen));
+          const camId = new TextDecoder().decode(camIdBytes);
+          // const ts = view.getFloat64(4 + camIdLen); // timestamp if needed
+          const frameOffset = 4 + camIdLen + 8;
+          if (camId && cameraStreams[camId]) {
+            const img = cameraStreams[camId].imgEl;
+            if (img) {
+              const jpegBlob = new Blob([event.data.slice(frameOffset)], { type: 'image/jpeg' });
+              const url = URL.createObjectURL(jpegBlob);
+              const old = img.src;
+              img.src = url;
+              if (old && old.startsWith('blob:')) URL.revokeObjectURL(old);
+            }
+          }
+        }
       }
     };
 
     wsVideo.onclose = function() {
       if (streamMode === 'ws') {
         streamMode = 'mjpeg';
-        $('stream').src = '/api/stream';
-        $('videoStatus').textContent = 'MJPEG';
+        refreshAllStreams();
       }
       setConnStatus('off');
       $('connText').textContent = 'MJPEG';
@@ -1081,74 +1194,180 @@ function connectWebSocket() {
     };
   } catch(e) {
     streamMode = 'mjpeg';
-    $('stream').src = '/api/stream';
+    refreshAllStreams();
     setConnStatus('off');
     scheduleReconnect();
   }
 
   try {
-    if (wsConfig && wsConfig.readyState === WebSocket.OPEN) {
-      return;
-    }
-    
-    if (wsConfig) {
-      wsConfig.onclose = null;
-      wsConfig.close();
-      wsConfig = null;
-    }
-    
+    if (wsConfig && wsConfig.readyState === WebSocket.OPEN) return;
+    if (wsConfig) { wsConfig.onclose = null; wsConfig.close(); wsConfig = null; }
     wsConfig = new WebSocket(wsConfigUrl);
     wsConfig.onopen = function() {};
-    wsConfig.onmessage = function(event) {
-      try { JSON.parse(event.data); } catch(e) {}
-    };
+    wsConfig.onmessage = function(event) { try { JSON.parse(event.data); } catch(e) {} };
     wsConfig.onerror = function() {};
     wsConfig.onclose = function() {};
   } catch(e) {}
 }
 
 function scheduleReconnect() {
-  if (reconnectTimer) {
-    return;
-  }
-  
+  if (reconnectTimer) return;
   if (reconnectAttempts >= MAX_RECONNECT) {
-    const longDelay = 120000;
-    reconnectTimer = setTimeout(() => {
-      reconnectAttempts = 0;
-      reconnectTimer = null;
-      connectWebSocket();
-    }, longDelay);
+    reconnectTimer = setTimeout(() => { reconnectAttempts = 0; reconnectTimer = null; connectWebSocket(); }, 120000);
     return;
   }
-  
   const delay = Math.min(3000 * Math.pow(2, reconnectAttempts), 60000);
   reconnectAttempts++;
-  reconnectTimer = setTimeout(() => {
-    reconnectTimer = null;
-    connectWebSocket();
-  }, delay);
+  reconnectTimer = setTimeout(() => { reconnectTimer = null; connectWebSocket(); }, delay);
 }
 
-// --- Polling ---
+function refreshAllStreams() {
+  cameraList.forEach(cam => {
+    const el = cameraStreams[cam.id]?.imgEl;
+    if (el) el.src = `/api/cameras/${cam.id}/stream?t=${Date.now()}`;
+  });
+}
+
+async function loadCameras() {
+  try {
+    const r = await fetch('/api/cameras');
+    const newList = await r.json();
+    const changed = JSON.stringify(newList) !== JSON.stringify(cameraList);
+    if (changed) {
+      const prevActive = activeCamId;
+      cameraList = newList;
+      if (cameraList.length > 0 && (!activeCamId || !cameraList.find(c => c.id === activeCamId))) {
+        activeCamId = cameraList[0].id;
+      }
+      buildCameraGrid();
+      buildCameraTabs();
+      if (prevActive && prevActive !== activeCamId) {
+        loadConfig();
+        pollEvents();
+        pollSnapshots();
+      }
+    }
+  } catch(e) {
+    console.error('loadCameras exception:', e);
+  }
+}
+
+function cleanupBlobUrls() {
+  for (const camId in cameraStreams) {
+    const stream = cameraStreams[camId];
+    if (stream && stream.imgEl) {
+      const src = stream.imgEl.src;
+      if (src && src.startsWith('blob:')) {
+        URL.revokeObjectURL(src);
+      }
+    }
+  }
+}
+
+function buildCameraGrid() {
+  const grid = $('cameraGrid');
+  const n = cameraList.length;
+  $('camCount').textContent = `${n} ${t('个摄像头', 'cameras')}`;
+
+  if (n === 0) {
+    grid.className = 'camera-grid cols-1';
+    grid.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text2);font-size:14px;">${t('暂无摄像头连接', 'No cameras connected')}</div>`;
+    return;
+  }
+
+  const cols = n <= 1 ? 1 : n <= 2 ? 2 : n <= 4 ? 2 : 3;
+  grid.className = `camera-grid cols-${cols}`;
+
+  cleanupBlobUrls();
+
+  grid.innerHTML = cameraList.map(cam => {
+    const isActive = cam.id === activeCamId;
+    return `<div class="camera-cell${isActive ? ' active' : ''}" id="cell-${cam.id}" onclick="selectCamera('${cam.id}')">
+      <img id="img-${cam.id}" alt="${cam.name}" src="/api/cameras/${cam.id}/stream">
+      <div class="cam-label">${cam.name}</div>
+      <div class="cam-status" id="status-${cam.id}"></div>
+    </div>`;
+  }).join('');
+
+  cameraStreams = {};
+  cameraList.forEach(cam => {
+    cameraStreams[cam.id] = { imgEl: $(`img-${cam.id}`) };
+  });
+
+  if (zoneDrawingMode) setupZoneCanvas();
+}
+
+function buildCameraTabs() {
+  const tabs = $('cameraTabs');
+  tabs.innerHTML = cameraList.map(cam => {
+    const isActive = cam.id === activeCamId;
+    return `<button class="camera-tab${isActive ? ' active' : ''}" onclick="selectCamera('${cam.id}')">${cam.name}</button>`;
+  }).join('');
+}
+
+function selectCamera(camId) {
+  if (activeCamId === camId) return;
+  if (activeCamId) {
+    cameraZones[activeCamId] = { zones: customZones.map(z => ({...z})), counter: zoneCounter };
+  }
+  activeCamId = camId;
+  cameraList.forEach(cam => {
+    const cell = document.getElementById(`cell-${cam.id}`);
+    if (cell) cell.classList.toggle('active', cam.id === camId);
+  });
+  buildCameraTabs();
+  const saved = cameraZones[camId];
+  if (saved) {
+    customZones = saved.zones;
+    zoneCounter = saved.counter;
+  } else {
+    customZones = [];
+    zoneCounter = 1;
+  }
+  _smoothedDet = 0;
+  _smoothedTrk = 0;
+  _smoothedEvt = 0;
+  renderZoneList();
+  loadConfig();
+  pollEvents();
+  pollSnapshots();
+  if (zoneDrawingMode) {
+    setupZoneCanvas();
+  }
+}
+
+let _smoothedDet = 0, _smoothedTrk = 0, _smoothedEvt = 0;
+const SMOOTH_FACTOR = 0.3;
+
+function animateValue(el, current, target, suffix = '') {
+  const diff = target - current;
+  if (Math.abs(diff) < 0.5) {
+    el.textContent = Math.round(target) + suffix;
+    return target;
+  }
+  const next = current + diff * SMOOTH_FACTOR;
+  el.textContent = Math.round(next) + suffix;
+  return next;
+}
+
 async function pollStats() {
   try {
-    const r = await fetch('/api/stats');
-    const d = await r.json();
-    $('vDet').textContent = d.detections ?? 0;
-    $('vTrk').textContent = d.tracks ?? 0;
-    $('vEvt').textContent = d.total_events ?? 0;
-    $('vUp').textContent = fmtUp(d.uptime_seconds || 0);
-    if (d.server_time_unix != null && d.server_tz_iana) {
-      serverClockUnix = d.server_time_unix;
-      serverClockPerfAt = performance.now();
-      serverTzIana = d.server_tz_iana;
+    let d = null;
+    if (!activeCamId || !cameraList.length) {
+      const r = await fetch('/api/stats');
+      d = await r.json();
+    } else {
+      const r = await fetch(`/api/cameras/${activeCamId}/stats`);
+      d = await r.json();
     }
-    if (d.current_model && !switchingModel) {
-      $('vModel').textContent = modelDisplayName(d.current_model);
-      if (currentModelFile !== d.current_model) {
-        currentModelFile = d.current_model;
-        renderModelList();
+    if (d && !d.error) {
+      _smoothedDet = animateValue($('vDet'), _smoothedDet, d.detections ?? 0);
+      _smoothedTrk = animateValue($('vTrk'), _smoothedTrk, d.tracks ?? 0);
+      _smoothedEvt = animateValue($('vEvt'), _smoothedEvt, d.total_events ?? 0);
+      $('vUp').textContent = fmtUp(d.uptime_seconds || 0);
+      if (d.current_model && !switchingModel) {
+        $('vModel').textContent = modelDisplayName(d.current_model);
+        if (currentModelFile !== d.current_model) { currentModelFile = d.current_model; renderModelList(); }
       }
     }
     if (!wsVideo || wsVideo.readyState !== WebSocket.OPEN) {
@@ -1167,40 +1386,79 @@ async function pollEvents() {
   try {
     const dateInput = $('eventDate');
     const dateFilter = dateInput.value ? dateInput.value.replace(/-/g, '') : null;
-    const url = dateFilter ? `/api/events?date=${dateFilter}` : '/api/events';
+    let url = '/api/events';
+    const params = [];
+    if (dateFilter) params.push(`date=${dateFilter}`);
+    if (params.length) url += '?' + params.join('&');
+
     const r = await fetch(url);
-    const evts = await r.json();
+    if (!r.ok) {
+      console.error('pollEvents HTTP', r.status, r.statusText);
+      return;
+    }
+    const text = await r.text();
+    let evts;
+    try { evts = JSON.parse(text); } catch(e) {
+      console.error('pollEvents JSON parse error:', text.slice(0, 200));
+      return;
+    }
+    if (!Array.isArray(evts)) {
+      console.error('pollEvents expected array, got:', typeof evts);
+      return;
+    }
     const labels = EVENT_LABELS[currentLang] || EVENT_LABELS.zh;
-    $('evtList').innerHTML = evts.slice().reverse().map(ev => {
-      const etype = ev.event_type || 'unknown';
-      const label = labels[etype] || etype;
-      const loc = ev.zone_name || ev.line_name || '';
-      const extra = ev.dwell_seconds ? `${ev.dwell_seconds}s` : '';
-      const detail = [loc, extra].filter(Boolean).join(' · ');
-      const tsFmt = formatEvtDisplay(ev.timestamp);
-      return `<div class="evt">
-        <div class="evt-tag tag-${etype}">${label}</div>
-        <div class="evt-body">
-          <div class="evt-main">Track #${ev.track_id}${detail ? ' · ' + detail : ''}</div>
-          <div class="evt-sub">${tsFmt.sub}</div>
-        </div>
-        <div class="evt-time">${tsFmt.short}</div>
-      </div>`;
-    }).join('');
-    $('evtCount').textContent = evts.length;
-    // 事件加载完成后同步更新截图
-    pollSnapshots();
-  } catch(e) {}
+    if (evts.length === 0) {
+      $('evtList').innerHTML = `<div style="text-align:center;padding:16px;color:var(--text2);font-size:11px;">${t('暂无事件','No events')}</div>`;
+      $('evtCount').textContent = '0';
+    } else {
+      $('evtList').innerHTML = evts.map(ev => {
+        const etype = ev.event_type || 'unknown';
+        const label = labels[etype] || etype;
+        const loc = ev.zone_name || ev.line_name || '';
+        const extra = ev.dwell_seconds ? `${ev.dwell_seconds}s` : '';
+        const detail = [loc, extra].filter(Boolean).join(' · ');
+        const tsFmt = formatEvtDisplay(ev.timestamp);
+        const camTag = ev.camera_name ? `<span class="evt-cam">[${ev.camera_name}]</span> ` : '';
+        return `<div class="evt">
+          <div class="evt-tag tag-${etype}">${label}</div>
+          <div class="evt-body">
+            <div class="evt-main">${camTag}Track #${ev.track_id}${detail ? ' · ' + detail : ''}</div>
+            <div class="evt-sub">${tsFmt.sub}</div>
+          </div>
+          <div class="evt-time">${tsFmt.short}</div>
+        </div>`;
+      }).join('');
+      $('evtCount').textContent = evts.length;
+    }
+  } catch(e) {
+    console.error('pollEvents exception:', e);
+  }
 }
 
 async function pollSnapshots() {
   try {
-    // 使用事件日志的日期筛选
     const dateInput = $('eventDate');
     const dateFilter = dateInput.value ? dateInput.value.replace(/-/g, '') : null;
-    const url = dateFilter ? `/api/events/images?date=${dateFilter}` : '/api/events/images';
+    let url = '/api/events/images';
+    const params = [];
+    if (dateFilter) params.push(`date=${dateFilter}`);
+    if (params.length) url += '?' + params.join('&');
+
     const r = await fetch(url);
-    const imgs = await r.json();
+    if (!r.ok) {
+      console.error('pollSnapshots HTTP', r.status, r.statusText);
+      return;
+    }
+    const text = await r.text();
+    let imgs;
+    try { imgs = JSON.parse(text); } catch(e) {
+      console.error('pollSnapshots JSON parse error:', text.slice(0, 200));
+      return;
+    }
+    if (!Array.isArray(imgs)) {
+      console.error('pollSnapshots expected array, got:', typeof imgs);
+      return;
+    }
     const gallery = $('snapGallery');
     $('snapCount').textContent = imgs.length;
     if (imgs.length === 0) {
@@ -1210,21 +1468,13 @@ async function pollSnapshots() {
     gallery.innerHTML = imgs.map(img =>
       `<img class="snap-thumb" src="${img.url}" loading="lazy" onclick="viewSnap('${img.url}')" title="${img.name}">`
     ).join('');
-  } catch(e) {}
+  } catch(e) {
+    console.error('pollSnapshots exception:', e);
+  }
 }
 
-// 按日期加载事件和截图
-function loadEventsByDate() {
-  pollEvents();
-  pollSnapshots(); // 事件日志切换时同步更新截图
-}
-
-// 重置日期筛选
-function resetEventDate() {
-  $('eventDate').value = '';
-  pollEvents();
-  pollSnapshots(); // 重置时同步更新截图
-}
+function loadEventsByDate() { pollEvents(); pollSnapshots(); }
+function resetEventDate() { $('eventDate').value = ''; pollEvents(); pollSnapshots(); }
 
 function viewSnap(url) {
   const ov = document.createElement('div');
@@ -1237,16 +1487,27 @@ function viewSnap(url) {
 async function loadConfig() {
   try {
     const r = await fetch('/api/config');
+    if (!r.ok) {
+      console.error('loadConfig HTTP', r.status, r.statusText);
+      return;
+    }
     const c = await r.json();
-    $('camName').textContent = c.camera?.name || 'Camera';
     const rules = c.rules || {};
     $('inCooldown').value = rules.event_cooldown_seconds || 8;
-    if (rules.zones?.length) {
-      $('inDwell').value = rules.zones[0].dwell_seconds || 10;
-      customZones = rules.zones.map(z => ({...z}));
+
+    const camZones = (rules.camera_zones && activeCamId) ? rules.camera_zones[activeCamId] : null;
+    const effectiveZones = camZones ? camZones.zones : rules.zones;
+    if (effectiveZones && effectiveZones.length > 0) {
+      $('inDwell').value = effectiveZones[0].dwell_seconds || 10;
+      customZones = effectiveZones.map(z => ({...z}));
       zoneCounter = customZones.length + 1;
       renderZoneList();
+    } else if (!camZones) {
+      customZones = [];
+      zoneCounter = 1;
+      renderZoneList();
     }
+
     if (c.detector?.conf_threshold) $('inConf').value = c.detector.conf_threshold;
     if (c.features) {
       for (const k in c.features) featureFlags[k] = c.features[k];
@@ -1254,10 +1515,79 @@ async function loadConfig() {
       buildFeatureGrid();
       updateDetectBtn();
     }
-  } catch(e) {}
+  } catch(e) {
+    console.error('loadConfig exception:', e);
+  }
 }
 
-// --- Init ---
+async function probeCamera() {
+  const ip = $('addCamIP').value.trim();
+  if (!ip) { toast(t('请输入IP地址', 'Please enter IP address'), 'error'); return; }
+  const statusEl = $('addCamStatus');
+  statusEl.textContent = t('正在探测...', 'Probing...');
+  statusEl.className = 'status-msg';
+  try {
+    const r = await fetch('/api/cameras/probe', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        ip: ip,
+        username: $('addCamUser').value || 'admin',
+        password: $('addCamPass').value || '',
+        rtsp_paths: [$('addCamPath').value || '/Streaming/Channels/101']
+      })
+    });
+    const data = await r.json();
+    if (data.reachable) {
+      statusEl.textContent = t(`✓ 摄像头可达: ${data.source}`, `✓ Camera reachable: ${data.source}`);
+      statusEl.className = 'status-msg ok';
+    } else {
+      statusEl.textContent = t('✗ 摄像头不可达', '✗ Camera not reachable');
+      statusEl.className = 'status-msg err';
+    }
+  } catch(e) {
+    statusEl.textContent = t('探测失败', 'Probe failed');
+    statusEl.className = 'status-msg err';
+  }
+}
+
+async function probeAndAddCamera() {
+  const ip = $('addCamIP').value.trim();
+  if (!ip) { toast(t('请输入IP地址', 'Please enter IP address'), 'error'); return; }
+  const statusEl = $('addCamStatus');
+  statusEl.textContent = t('正在探测并添加...', 'Probing and adding...');
+  statusEl.className = 'status-msg';
+  try {
+    const r = await fetch('/api/cameras/add', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        ip: ip,
+        name: $('addCamName').value || `camera-${ip}`,
+        username: $('addCamUser').value || 'admin',
+        password: $('addCamPass').value || '',
+        rtsp_path: $('addCamPath').value || '/Streaming/Channels/101',
+        use_gstreamer: true
+      })
+    });
+    const data = await r.json();
+    if (data.status === 'ok') {
+      statusEl.textContent = t(`✓ 摄像头已添加: ${data.camera.id}`, `✓ Camera added: ${data.camera.id}`);
+      statusEl.className = 'status-msg ok';
+      toast(t('摄像头添加成功', 'Camera added successfully'));
+      $('addCamIP').value = '';
+      $('addCamName').value = '';
+      setTimeout(() => loadCameras(), 1000);
+    } else {
+      statusEl.textContent = t(`✗ ${data.error || '添加失败'}`, `✗ ${data.error || 'Add failed'}`);
+      statusEl.className = 'status-msg err';
+    }
+  } catch(e) {
+    statusEl.textContent = t('添加失败', 'Add failed');
+    statusEl.className = 'status-msg err';
+  }
+}
+
 switchLang(currentLang);
 buildFeatureGrid();
 updateDetectBtn();
@@ -1266,6 +1596,7 @@ updateClock();
 
 (async function init() {
   await loadConfig();
+  await loadCameras();
   loadModels();
   connectWebSocket();
   pollStats();
@@ -1275,6 +1606,7 @@ updateClock();
   setInterval(pollEvents, 3000);
   setInterval(pollSnapshots, 5000);
   setInterval(loadModels, 60000);
+  setInterval(loadCameras, 5000);
 })();
 </script>
 </body>

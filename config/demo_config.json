@@ -1,9 +1,32 @@
 {
-  "camera": {
-    "name": "poe-camera-1",
-    "source": "rtsp://admin:@192.168.3.10/Streaming/Channels/101",
-    "use_gstreamer": true,
-    "notes": "use_gstreamer enables Jetson NVDEC hardware decode, set false to fall back to CPU"
+  "cameras": {
+    "mode": "manual",
+    "auto_discover": {
+      "subnet": "192.168.3.0/24",
+      "username": "admin",
+      "password": "",
+      "rtsp_paths": [
+        "/Streaming/Channels/101",
+        "/Streaming/Channels/1"
+      ],
+      "scan_interval_seconds": 30
+    },
+    "manual": [
+      {
+        "id": "cam-0",
+        "name": "poe-camera-1",
+        "source": "rtsp://admin:@192.168.3.10/Streaming/Channels/101",
+        "use_gstreamer": true,
+        "enabled": true
+      },
+      {
+        "id": "cam-1",
+        "name": "poe-camera-2",
+        "source": "rtsp://admin:@192.168.3.20/Streaming/Channels/101",
+        "use_gstreamer": true,
+        "enabled": true
+      }
+    ]
   },
   "detector": {
     "backend": "yolov5_trt",
@@ -24,13 +47,14 @@
     "lines": []
   },
   "output": {
-    "root": "/app/output",
+    "root": "output",
     "save_snapshots": true
   },
   "display": {
     "show_window": true,
     "window_name": "Industrial Security Demo",
-    "resize_width": 1280
+    "resize_width": 1280,
+    "web_jpeg_quality": 50
   },
   "web": {
     "port": 8080
